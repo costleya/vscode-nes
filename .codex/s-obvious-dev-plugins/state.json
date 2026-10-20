@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "scope": "repo",
+  "options": {
+    "hooks": true,
+    "integrations": [
+      "serena"
+    ]
+  },
+  "plugin": "s-obvious-dev-plugins",
+  "version": "0.2.0",
+  "templateRevision": "40e9659bbbccac66c7fc6da2d6e1f4661eaa5a3ae760b558aaa7a2d51d745aef",
+  "revisions": {
+    "vitest-daemon": {
+      "url": "https://github.com/costleya/vitest-daemon.git",
+      "revision": "370d71ca90230790d17b79302867c27a9b76257f"
+    },
+    "serena-shared-mcp": {
+      "url": "https://github.com/costleya/serena-shared-mcp.git",
+      "revision": "09a1f07303a7fafc2c9038ab06f53482641edcaa"
+    }
+  },
+  "files": [
+    {
+      "file": ".codex/rules/vitest-daemon.rules",
+      "sha256": "830322d4d6d6b6eb330d63dc2ea70dc5d1c95a9bb63bff685fe9331d8abc2b71"
+    }
+  ],
+  "blocks": [
+    {
+      "file": ".gitignore",
+      "content": "\n# BEGIN s-obvious-dev-plugins serena\n/.serena/\n# END s-obvious-dev-plugins serena\n"
+    },
+    {
+      "file": ".codex/config.toml",
+      "content": "\n# BEGIN s-obvious-dev-plugins mcp_servers.serena\n[mcp_servers.serena]\ncommand = \"node\"\nstartup_timeout_sec = 60\nargs = [\"-e\",\"const p=require('node:path');const h=require('node:os').homedir();import(require('node:url').pathToFileURL(p.join(h,'.local','share','s-obvious-dev-plugins','mcp-runtime','scripts','mcp-launch.mjs')).href).catch(e=>{console.error(e.message+'. Run the plugin bootstrap or global update command to install the shared runtime.');process.exitCode=1})\",\"mcp-launch\",\"serena\"]\n# END s-obvious-dev-plugins mcp_servers.serena\n"
+    },
+    {
+      "file": ".codex/config.toml",
+      "content": "\n# BEGIN s-obvious-dev-plugins navigation-hooks\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ntimeout = 5\ncommand = \"node -e 'const p=require('\\\\''node:path'\\\\'');const h=require('\\\\''node:os'\\\\'').homedir();import(require('\\\\''node:url'\\\\'').pathToFileURL(p.join(h,'\\\\''.local'\\\\'','\\\\''share'\\\\'','\\\\''s-obvious-dev-plugins'\\\\'','\\\\''mcp-runtime'\\\\'','\\\\''scripts'\\\\'','\\\\''navigation-hook.mjs'\\\\'')).href).catch(e=>{console.error(e.message+'\\\\''. Run the plugin bootstrap or global update command to install the shared runtime.'\\\\'');process.exitCode=1})'\"\n\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ntimeout = 5\ncommand = \"node -e 'const p=require('\\\\''node:path'\\\\'');const h=require('\\\\''node:os'\\\\'').homedir();import(require('\\\\''node:url'\\\\'').pathToFileURL(p.join(h,'\\\\''.local'\\\\'','\\\\''share'\\\\'','\\\\''s-obvious-dev-plugins'\\\\'','\\\\''mcp-runtime'\\\\'','\\\\''scripts'\\\\'','\\\\''navigation-hook.mjs'\\\\'')).href).catch(e=>{console.error(e.message+'\\\\''. Run the plugin bootstrap or global update command to install the shared runtime.'\\\\'');process.exitCode=1})'\"\n\n[[hooks.SubagentStop]]\n[[hooks.SubagentStop.hooks]]\ntype = \"command\"\ntimeout = 5\ncommand = \"node -e 'const p=require('\\\\''node:path'\\\\'');const h=require('\\\\''node:os'\\\\'').homedir();import(require('\\\\''node:url'\\\\'').pathToFileURL(p.join(h,'\\\\''.local'\\\\'','\\\\''share'\\\\'','\\\\''s-obvious-dev-plugins'\\\\'','\\\\''mcp-runtime'\\\\'','\\\\''scripts'\\\\'','\\\\''navigation-hook.mjs'\\\\'')).href).catch(e=>{console.error(e.message+'\\\\''. Run the plugin bootstrap or global update command to install the shared runtime.'\\\\'');process.exitCode=1})'\"\n\n[[hooks.SessionEnd]]\n[[hooks.SessionEnd.hooks]]\ntype = \"command\"\ntimeout = 3\ncommand = \"node -e 'const p=require('\\\\''node:path'\\\\'');const h=require('\\\\''node:os'\\\\'').homedir();import(require('\\\\''node:url'\\\\'').pathToFileURL(p.join(h,'\\\\''.local'\\\\'','\\\\''share'\\\\'','\\\\''s-obvious-dev-plugins'\\\\'','\\\\''mcp-runtime'\\\\'','\\\\''scripts'\\\\'','\\\\''navigation-hook.mjs'\\\\'')).href).catch(e=>{console.error(e.message+'\\\\''. Run the plugin bootstrap or global update command to install the shared runtime.'\\\\'');process.exitCode=1})'\"\n# END s-obvious-dev-plugins navigation-hooks\n"
+    },
+    {
+      "file": "AGENTS.md",
+      "content": "\n<!-- BEGIN s-obvious-dev-plugins -->\n### Code navigation\n\nChoose navigation tools by the question:\n\n- Serena: symbols, bodies, and references in the selected checkout.\n- colgrep: semantic discovery when the concept is known but the symbol or path is not.\n- ripgrep (`rg`): literal/regex search and fallback discovery; `rg --files` for file discovery.\n- ast-grep: syntax-aware structural search and rewrites.\n- jq: parse, filter, and inspect JSON instead of treating structured data as plain text.\n\nIf a tool is unavailable, report it once and use an available alternative. Install missing tools only through explicitly requested `$s-obvious-dev-setup`.\n<!-- END s-obvious-dev-plugins -->\n"
+    }
+  ],
+  "createdContainers": [
+    "AGENTS.md",
+    ".codex/config.toml"
+  ]
+}
