@@ -36,38 +36,38 @@ import { z } from "zod";
 import { logger } from "~/core/logger.ts";
 
 const ALL_LANGS = [
-	...langBash,
-	...langC,
-	...langCpp,
-	...langCsharp,
-	...langCss,
-	...langGo,
-	...langHtml,
-	...langJava,
-	...langJs,
-	...langJson,
-	...langJsx,
-	...langKotlin,
-	...langMarkdown,
-	...langPhp,
-	...langPython,
-	...langRuby,
-	...langRust,
-	...langSwift,
-	...langToml,
-	...langTs,
-	...langTsx,
-	...langYaml,
+  ...langBash,
+  ...langC,
+  ...langCpp,
+  ...langCsharp,
+  ...langCss,
+  ...langGo,
+  ...langHtml,
+  ...langJava,
+  ...langJs,
+  ...langJson,
+  ...langJsx,
+  ...langKotlin,
+  ...langMarkdown,
+  ...langPhp,
+  ...langPython,
+  ...langRuby,
+  ...langRust,
+  ...langSwift,
+  ...langToml,
+  ...langTs,
+  ...langTsx,
+  ...langYaml,
 ];
 
 /** VS Code languageId → shiki grammar name (only where they differ) */
 const LANGUAGE_MAP: Record<string, string> = {
-	javascriptreact: "jsx",
-	typescriptreact: "tsx",
+  javascriptreact: "jsx",
+  typescriptreact: "tsx",
 };
 
 function resolveLanguageId(vscodeLanguageId: string): string {
-	return LANGUAGE_MAP[vscodeLanguageId] ?? vscodeLanguageId;
+  return LANGUAGE_MAP[vscodeLanguageId] ?? vscodeLanguageId;
 }
 
 // ── Highlighter singleton ──────────────────────────────────────────────
@@ -77,59 +77,52 @@ const FALLBACK_FG_LIGHT = "#000000";
 const USER_THEME_NAME = "user-theme";
 
 const themeContributionSchema = z.object({
-	label: z.string().optional(),
-	id: z.string().optional(),
-	uiTheme: z.string().optional(),
-	path: z.string().optional(),
+  label: z.string().optional(),
+  id: z.string().optional(),
+  uiTheme: z.string().optional(),
+  path: z.string().optional(),
 });
 
 const themeTokenColorSettingsSchema = z.object({
-	foreground: z.string().optional(),
-	background: z.string().optional(),
-	fontStyle: z.string().optional(),
+  foreground: z.string().optional(),
+  background: z.string().optional(),
+  fontStyle: z.string().optional(),
 });
 
 const themeTokenColorSchema = z.object({
-	name: z.string().optional(),
-	scope: z.union([z.string(), z.array(z.string())]).optional(),
-	settings: themeTokenColorSettingsSchema.optional(),
+  name: z.string().optional(),
+  scope: z.union([z.string(), z.array(z.string())]).optional(),
+  settings: themeTokenColorSettingsSchema.optional(),
 });
 
 const themeSemanticTokenSettingsSchema = z.object({
-	foreground: z.string().optional(),
-	fontStyle: z.string().optional(),
-	bold: z.boolean().optional(),
-	italic: z.boolean().optional(),
-	underline: z.boolean().optional(),
-	strikethrough: z.boolean().optional(),
+  foreground: z.string().optional(),
+  fontStyle: z.string().optional(),
+  bold: z.boolean().optional(),
+  italic: z.boolean().optional(),
+  underline: z.boolean().optional(),
+  strikethrough: z.boolean().optional(),
 });
 
 const themeJsonSchema = z.object({
-	include: z.string().optional(),
-	colors: z.record(z.string(), z.string()).optional(),
-	tokenColors: z.array(themeTokenColorSchema).optional(),
-	semanticHighlighting: z.boolean().optional(),
-	semanticTokenColors: z
-		.record(z.string(), z.union([z.string(), themeSemanticTokenSettingsSchema]))
-		.optional(),
+  include: z.string().optional(),
+  colors: z.record(z.string(), z.string()).optional(),
+  tokenColors: z.array(themeTokenColorSchema).optional(),
+  semanticHighlighting: z.boolean().optional(),
+  semanticTokenColors: z
+    .record(z.string(), z.union([z.string(), themeSemanticTokenSettingsSchema]))
+    .optional(),
 });
 
 type ThemeJson = z.infer<typeof themeJsonSchema>;
-type ThemeSemanticTokenSettings = z.infer<
-	typeof themeSemanticTokenSettingsSchema
->;
+type ThemeSemanticTokenSettings = z.infer<typeof themeSemanticTokenSettingsSchema>;
 
-type ShikiThemeInput =
-	| ThemeRegistrationAny
-	| typeof darkPlusTheme
-	| typeof lightPlusTheme;
+type ShikiThemeInput = ThemeRegistrationAny | typeof darkPlusTheme;
 
 let highlighter: HighlighterCore | null = null;
 
-function isThemeSemanticTokenSettings(
-	value: unknown,
-): value is ThemeSemanticTokenSettings {
-	return themeSemanticTokenSettingsSchema.safeParse(value).success;
+function isThemeSemanticTokenSettings(value: unknown): value is ThemeSemanticTokenSettings {
+  return themeSemanticTokenSettingsSchema.safeParse(value).success;
 }
 
 /**
@@ -142,213 +135,200 @@ function isThemeSemanticTokenSettings(
  * - An auto-generated ID: `${extensionId}-${path-stem}` (when no explicit id)
  */
 function discoverActiveTheme(): ThemeJson | null {
-	try {
-		const themeSetting = vscode.workspace
-			.getConfiguration("workbench")
-			.get<string>("colorTheme");
-		if (!themeSetting) return null;
+  try {
+    const themeSetting = vscode.workspace.getConfiguration("workbench").get<string>("colorTheme");
+    if (!themeSetting) return null;
 
-		const settingLower = themeSetting.toLowerCase();
+    const settingLower = themeSetting.toLowerCase();
 
-		for (const ext of vscode.extensions.all) {
-			const themesResult = z
-				.array(themeContributionSchema)
-				.safeParse(ext.packageJSON?.contributes?.themes);
-			if (!themesResult.success) continue;
-			const themes = themesResult.data;
+    for (const ext of vscode.extensions.all) {
+      const themesResult = z
+        .array(themeContributionSchema)
+        .safeParse(ext.packageJSON?.contributes?.themes);
+      if (!themesResult.success) continue;
+      const themes = themesResult.data;
 
-			for (const themeEntry of themes) {
-				if (!themeEntry.path) continue;
+      for (const themeEntry of themes) {
+        if (!themeEntry.path) continue;
 
-				// Match against explicit id, label, or the auto-generated ID
-				// that VS Code constructs as `${extensionId}-${path-stem}`
-				const candidates: string[] = [];
-				if (themeEntry.id) candidates.push(themeEntry.id);
-				if (themeEntry.label) candidates.push(themeEntry.label);
+        // Match against explicit id, label, or the auto-generated ID
+        // that VS Code constructs as `${extensionId}-${path-stem}`
+        const candidates: string[] = [];
+        if (themeEntry.id) candidates.push(themeEntry.id);
+        if (themeEntry.label) candidates.push(themeEntry.label);
 
-				// VS Code generates the ID from extension ID + path stem when
-				// no explicit id is provided. e.g. for a built-in theme at
-				// "./themes/dark_plus.json" in extension "vscode.theme-defaults",
-				// the generated ID might be "Default Dark+".
-				const pathStem = path.basename(
-					themeEntry.path,
-					path.extname(themeEntry.path),
-				);
-				candidates.push(`${ext.id}-${pathStem}`);
+        // VS Code generates the ID from extension ID + path stem when
+        // no explicit id is provided. e.g. for a built-in theme at
+        // "./themes/dark_plus.json" in extension "vscode.theme-defaults",
+        // the generated ID might be "Default Dark+".
+        const pathStem = path.basename(themeEntry.path, path.extname(themeEntry.path));
+        candidates.push(`${ext.id}-${pathStem}`);
 
-				const matched = candidates.some(
-					(c) => c.toLowerCase() === settingLower,
-				);
-				if (!matched) continue;
+        const matched = candidates.some((c) => c.toLowerCase() === settingLower);
+        if (!matched) continue;
 
-				const themePath = path.join(ext.extensionPath, themeEntry.path);
-				const result = resolveThemeFile(themePath);
-				if (result) {
-					logger.info("Discovered active theme:", themeSetting, "from", ext.id);
-					return result;
-				}
-			}
-		}
+        const themePath = path.join(ext.extensionPath, themeEntry.path);
+        const result = resolveThemeFile(themePath);
+        if (result) {
+          logger.info("Discovered active theme:", themeSetting, "from", ext.id);
+          return result;
+        }
+      }
+    }
 
-		logger.warn("Could not find theme file for:", themeSetting);
-	} catch (err) {
-		logger.warn("Failed to discover active theme:", err);
-	}
-	return null;
+    logger.warn("Could not find theme file for:", themeSetting);
+  } catch (err) {
+    logger.warn("Failed to discover active theme:", err);
+  }
+  return null;
 }
 
 function stripJsonComments(raw: string): string {
-	let result = "";
-	let i = 0;
-	let inString = false;
+  let result = "";
+  let i = 0;
+  let inString = false;
 
-	while (i < raw.length) {
-		const char = raw[i];
-		const next = raw[i + 1];
+  while (i < raw.length) {
+    const char = raw[i];
+    const next = raw[i + 1];
 
-		if (inString) {
-			result += char;
-			if (char === "\\" && i + 1 < raw.length) {
-				result += raw[i + 1];
-				i += 2;
-				continue;
-			}
-			if (char === '"') {
-				inString = false;
-			}
-			i++;
-			continue;
-		}
+    if (inString) {
+      result += char;
+      if (char === "\\" && i + 1 < raw.length) {
+        result += raw[i + 1];
+        i += 2;
+        continue;
+      }
+      if (char === '"') {
+        inString = false;
+      }
+      i++;
+      continue;
+    }
 
-		if (char === '"') {
-			inString = true;
-			result += char;
-			i++;
-			continue;
-		}
+    if (char === '"') {
+      inString = true;
+      result += char;
+      i++;
+      continue;
+    }
 
-		if (char === "/" && next === "/") {
-			while (i < raw.length && raw[i] !== "\n") i++;
-			continue;
-		}
+    if (char === "/" && next === "/") {
+      while (i < raw.length && raw[i] !== "\n") i++;
+      continue;
+    }
 
-		if (char === "/" && next === "*") {
-			i += 2;
-			while (i < raw.length && !(raw[i] === "*" && raw[i + 1] === "/")) {
-				i++;
-			}
-			i += 2; // Skip closing */
-			continue;
-		}
+    if (char === "/" && next === "*") {
+      i += 2;
+      while (i < raw.length && !(raw[i] === "*" && raw[i + 1] === "/")) {
+        i++;
+      }
+      i += 2; // Skip closing */
+      continue;
+    }
 
-		result += char;
-		i++;
-	}
+    result += char;
+    i++;
+  }
 
-	return result;
+  return result;
 }
 
 function parseJsonc(raw: string): unknown {
-	const stripped = stripJsonComments(raw);
-	const cleaned = stripped.replace(/,\s*([}\]])/g, "$1");
-	return JSON.parse(cleaned);
+  const stripped = stripJsonComments(raw);
+  const cleaned = stripped.replace(/,\s*([}\]])/g, "$1");
+  return JSON.parse(cleaned);
 }
 
 function parseThemeJson(raw: string): ThemeJson | null {
-	const parsed = parseJsonc(raw);
-	const result = themeJsonSchema.safeParse(parsed);
-	if (!result.success) return null;
-	return result.data;
+  const parsed = parseJsonc(raw);
+  const result = themeJsonSchema.safeParse(parsed);
+  if (!result.success) return null;
+  return result.data;
 }
 
 function resolveThemeFile(themePath: string): ThemeJson | null {
-	try {
-		const raw = fs.readFileSync(themePath, "utf8");
-		const theme = parseThemeJson(raw);
-		if (!theme) return null;
+  try {
+    const raw = fs.readFileSync(themePath, "utf8");
+    const theme = parseThemeJson(raw);
+    if (!theme) return null;
 
-		if (typeof theme.include === "string") {
-			const parentPath = path.resolve(path.dirname(themePath), theme.include);
-			const parent = resolveThemeFile(parentPath);
-			if (parent) {
-				const parentTokenColors = parent.tokenColors ?? [];
-				const childTokenColors = theme.tokenColors ?? [];
-				const parentColors = parent.colors ?? {};
-				const childColors = theme.colors ?? {};
+    if (typeof theme.include === "string") {
+      const parentPath = path.resolve(path.dirname(themePath), theme.include);
+      const parent = resolveThemeFile(parentPath);
+      if (parent) {
+        const parentTokenColors = parent.tokenColors ?? [];
+        const childTokenColors = theme.tokenColors ?? [];
+        const parentColors = parent.colors ?? {};
+        const childColors = theme.colors ?? {};
 
-				return {
-					...parent,
-					...theme,
-					tokenColors: [...parentTokenColors, ...childTokenColors],
-					colors: { ...parentColors, ...childColors },
-				};
-			}
-		}
+        return {
+          ...parent,
+          ...theme,
+          tokenColors: [...parentTokenColors, ...childTokenColors],
+          colors: { ...parentColors, ...childColors },
+        };
+      }
+    }
 
-		return theme;
-	} catch (err) {
-		logger.warn("Failed to read theme file:", themePath, err);
-		return null;
-	}
+    return theme;
+  } catch (err) {
+    logger.warn("Failed to read theme file:", themePath, err);
+    return null;
+  }
 }
 
-function buildShikiTheme(
-	themeJson: ThemeJson,
-	isDark: boolean,
-): ThemeRegistrationAny {
-	const tokenColors: IRawThemeSetting[] = themeJson.tokenColors
-		? themeJson.tokenColors.map((token) => {
-				const settings: IRawThemeSetting["settings"] = {
-					...(token.settings?.foreground !== undefined
-						? { foreground: token.settings.foreground }
-						: {}),
-					...(token.settings?.background !== undefined
-						? { background: token.settings.background }
-						: {}),
-					...(token.settings?.fontStyle !== undefined
-						? { fontStyle: token.settings.fontStyle }
-						: {}),
-				};
-				return {
-					settings,
-					...(token.name !== undefined ? { name: token.name } : {}),
-					...(token.scope !== undefined ? { scope: token.scope } : {}),
-				};
-			})
-		: [];
+function buildShikiTheme(themeJson: ThemeJson, isDark: boolean): ThemeRegistrationAny {
+  const tokenColors: IRawThemeSetting[] = themeJson.tokenColors
+    ? themeJson.tokenColors.map((token) => {
+        const settings: IRawThemeSetting["settings"] = {
+          ...(token.settings?.foreground !== undefined
+            ? { foreground: token.settings.foreground }
+            : {}),
+          ...(token.settings?.background !== undefined
+            ? { background: token.settings.background }
+            : {}),
+          ...(token.settings?.fontStyle !== undefined
+            ? { fontStyle: token.settings.fontStyle }
+            : {}),
+        };
+        return {
+          settings,
+          ...(token.name !== undefined ? { name: token.name } : {}),
+          ...(token.scope !== undefined ? { scope: token.scope } : {}),
+        };
+      })
+    : [];
 
-	const semanticTokenColors: Record<string, string> = {};
-	if (themeJson.semanticTokenColors) {
-		for (const [key, value] of Object.entries(themeJson.semanticTokenColors)) {
-			if (typeof value === "string") {
-				semanticTokenColors[key] = value;
-			} else if (
-				isThemeSemanticTokenSettings(value) &&
-				typeof value.foreground === "string"
-			) {
-				semanticTokenColors[key] = value.foreground;
-			}
-		}
-	}
+  const semanticTokenColors: Record<string, string> = {};
+  if (themeJson.semanticTokenColors) {
+    for (const [key, value] of Object.entries(themeJson.semanticTokenColors)) {
+      if (typeof value === "string") {
+        semanticTokenColors[key] = value;
+      } else if (isThemeSemanticTokenSettings(value) && typeof value.foreground === "string") {
+        semanticTokenColors[key] = value.foreground;
+      }
+    }
+  }
 
-	const theme: ThemeRegistrationAny = {
-		name: USER_THEME_NAME,
-		type: isDark ? "dark" : "light",
-		settings: tokenColors,
-	};
-	if (themeJson.colors) {
-		theme.colors = themeJson.colors;
-	}
-	if (tokenColors.length > 0) {
-		theme.tokenColors = tokenColors;
-	}
-	if (themeJson.semanticHighlighting !== undefined) {
-		theme.semanticHighlighting = themeJson.semanticHighlighting;
-	}
-	if (Object.keys(semanticTokenColors).length > 0) {
-		theme.semanticTokenColors = semanticTokenColors;
-	}
-	return theme;
+  const theme: ThemeRegistrationAny = {
+    name: USER_THEME_NAME,
+    type: isDark ? "dark" : "light",
+    settings: tokenColors,
+  };
+  if (themeJson.colors) {
+    theme.colors = themeJson.colors;
+  }
+  if (tokenColors.length > 0) {
+    theme.tokenColors = tokenColors;
+  }
+  if (themeJson.semanticHighlighting !== undefined) {
+    theme.semanticHighlighting = themeJson.semanticHighlighting;
+  }
+  if (Object.keys(semanticTokenColors).length > 0) {
+    theme.semanticTokenColors = semanticTokenColors;
+  }
+  return theme;
 }
 
 let cachedThemeSetting: string | null = null;
@@ -357,172 +337,147 @@ let cachedEditorBackground: string | null = null;
 let themeVersion = 0;
 
 function resetThemeCache(): void {
-	cachedThemeSetting = null;
-	cachedThemeJson = null;
-	cachedEditorBackground = null;
+  cachedThemeSetting = null;
+  cachedThemeJson = null;
+  cachedEditorBackground = null;
 }
 
 function getActiveThemeSetting(): string | null {
-	return (
-		vscode.workspace.getConfiguration("workbench").get<string>("colorTheme") ??
-		null
-	);
+  return vscode.workspace.getConfiguration("workbench").get<string>("colorTheme") ?? null;
 }
 
 function getCachedThemeJson(): ThemeJson | null {
-	const currentSetting = getActiveThemeSetting();
-	if (
-		currentSetting &&
-		cachedThemeSetting === currentSetting &&
-		cachedThemeJson
-	) {
-		return cachedThemeJson;
-	}
-	cachedThemeSetting = currentSetting;
-	cachedThemeJson = discoverActiveTheme();
-	cachedEditorBackground = null;
-	return cachedThemeJson;
+  const currentSetting = getActiveThemeSetting();
+  if (currentSetting && cachedThemeSetting === currentSetting && cachedThemeJson) {
+    return cachedThemeJson;
+  }
+  cachedThemeSetting = currentSetting;
+  cachedThemeJson = discoverActiveTheme();
+  cachedEditorBackground = null;
+  return cachedThemeJson;
 }
 
 function getEditorBackgroundColor(isDark: boolean): string {
-	if (cachedEditorBackground) return cachedEditorBackground;
-	const themeJson = getCachedThemeJson();
-	const themeColors = themeJson?.colors ?? {};
-	const editorBg = themeColors["editor.background"];
-	if (typeof editorBg === "string" && editorBg.length > 0) {
-		cachedEditorBackground = editorBg;
-		return editorBg;
-	}
-	const fallback = isDark ? "#1e1e1e" : "#ffffff";
-	cachedEditorBackground = fallback;
-	return fallback;
+  if (cachedEditorBackground) return cachedEditorBackground;
+  const themeJson = getCachedThemeJson();
+  const themeColors = themeJson?.colors ?? {};
+  const editorBg = themeColors["editor.background"];
+  if (typeof editorBg === "string" && editorBg.length > 0) {
+    cachedEditorBackground = editorBg;
+    return editorBg;
+  }
+  const fallback = isDark ? "#1e1e1e" : "#ffffff";
+  cachedEditorBackground = fallback;
+  return fallback;
 }
 
 export function initSyntaxHighlighter(): void {
-	const dark = isDarkTheme();
-	const themeJson = getCachedThemeJson();
+  const dark = isDarkTheme();
+  const themeJson = getCachedThemeJson();
 
-	const themes: ShikiThemeInput[] = [darkPlusTheme, lightPlusTheme];
-	if (themeJson) {
-		themes.push(buildShikiTheme(themeJson, dark));
-	}
+  const themes: ShikiThemeInput[] = [darkPlusTheme, lightPlusTheme];
+  if (themeJson) {
+    themes.push(buildShikiTheme(themeJson, dark));
+  }
 
-	highlighter = createHighlighterCoreSync({
-		themes,
-		langs: ALL_LANGS,
-		engine: createJavaScriptRegexEngine(),
-	});
+  highlighter = createHighlighterCoreSync({
+    themes,
+    langs: ALL_LANGS,
+    engine: createJavaScriptRegexEngine(),
+  });
 }
 
 export function reloadTheme(): void {
-	resetThemeCache();
-	themeVersion += 1;
-	initSyntaxHighlighter();
-	clearSvgCache();
+  resetThemeCache();
+  themeVersion += 1;
+  initSyntaxHighlighter();
+  clearSvgCache();
 }
 
 interface ColoredToken {
-	content: string;
-	color?: string;
+  content: string;
+  color?: string;
 }
 
 interface EditorFontSettings {
-	fontFamily: string;
-	fontSize: number;
-	lineHeight: number;
-	ligatures: boolean;
-	tabSize: number;
+  fontFamily: string;
+  fontSize: number;
+  lineHeight: number;
+  ligatures: boolean;
+  tabSize: number;
 }
 
 function getEditorFontSettings(): EditorFontSettings {
-	const editorConfig = vscode.workspace.getConfiguration("editor");
-	const fontFamily = editorConfig.get<string>("fontFamily", "monospace");
-	const fontSize = editorConfig.get<number>("fontSize", 13);
-	const lineHeight = editorConfig.get<number>("lineHeight", 0);
-	const ligaturesRaw = editorConfig.get<boolean | string>(
-		"fontLigatures",
-		false,
-	);
-	const ligatures =
-		typeof ligaturesRaw === "string" ? ligaturesRaw.length > 0 : ligaturesRaw;
-	const editorTabSize = vscode.window.activeTextEditor?.options.tabSize;
-	const tabSize = editorConfig.get<number>(
-		"tabSize",
-		typeof editorTabSize === "number" ? editorTabSize : 4,
-	);
+  const editorConfig = vscode.workspace.getConfiguration("editor");
+  const fontFamily = editorConfig.get<string>("fontFamily", "monospace");
+  const fontSize = editorConfig.get<number>("fontSize", 13);
+  const lineHeight = editorConfig.get<number>("lineHeight", 0);
+  const ligaturesRaw = editorConfig.get<boolean | string>("fontLigatures", false);
+  const ligatures = typeof ligaturesRaw === "string" ? ligaturesRaw.length > 0 : ligaturesRaw;
+  const editorTabSize = vscode.window.activeTextEditor?.options.tabSize;
+  const tabSize = editorConfig.get<number>(
+    "tabSize",
+    typeof editorTabSize === "number" ? editorTabSize : 4,
+  );
 
-	return { fontFamily, fontSize, lineHeight, ligatures, tabSize };
+  return { fontFamily, fontSize, lineHeight, ligatures, tabSize };
 }
 
-function expandTabs(
-	text: string,
-	tabSize: number,
-): { expanded: string; indexMap: number[] } {
-	let column = 0;
-	const indexMap: number[] = new Array(text.length + 1);
-	let expanded = "";
+function expandTabs(text: string, tabSize: number): { expanded: string; indexMap: number[] } {
+  let column = 0;
+  // oxlint-disable-next-line unicorn/no-new-array -- Preallocate the lookup table; every slot is assigned below.
+  const indexMap: number[] = new Array(text.length + 1);
+  let expanded = "";
 
-	for (let i = 0; i < text.length; i++) {
-		indexMap[i] = expanded.length;
-		const ch = text[i];
-		if (ch === "\t") {
-			const spaces = tabSize - (column % tabSize || 0);
-			expanded += " ".repeat(spaces);
-			column += spaces;
-		} else {
-			expanded += ch;
-			column += 1;
-		}
-	}
-	indexMap[text.length] = expanded.length;
-	return { expanded, indexMap };
+  for (let i = 0; i < text.length; i++) {
+    indexMap[i] = expanded.length;
+    const ch = text[i];
+    if (ch === "\t") {
+      const spaces = tabSize - (column % tabSize || 0);
+      expanded += " ".repeat(spaces);
+      column += spaces;
+    } else {
+      expanded += ch;
+      column += 1;
+    }
+  }
+  indexMap[text.length] = expanded.length;
+  return { expanded, indexMap };
 }
 
-function tokenizeWithShiki(
-	text: string,
-	languageId: string,
-	dark: boolean,
-): ColoredToken[] {
-	if (!highlighter) {
-		initSyntaxHighlighter();
-	}
+function tokenizeWithShiki(text: string, languageId: string, dark: boolean): ColoredToken[] {
+  if (!highlighter) {
+    initSyntaxHighlighter();
+  }
 
-	const activeHighlighter = highlighter;
-	if (!activeHighlighter) {
-		return [
-			{ content: text, color: dark ? FALLBACK_FG_DARK : FALLBACK_FG_LIGHT },
-		];
-	}
+  const activeHighlighter = highlighter;
+  if (!activeHighlighter) {
+    return [{ content: text, color: dark ? FALLBACK_FG_DARK : FALLBACK_FG_LIGHT }];
+  }
 
-	const lang = resolveLanguageId(languageId);
+  const lang = resolveLanguageId(languageId);
 
-	const themeName = hasUserTheme()
-		? USER_THEME_NAME
-		: dark
-			? "dark-plus"
-			: "light-plus";
+  const themeName = hasUserTheme() ? USER_THEME_NAME : dark ? "dark-plus" : "light-plus";
 
-	try {
-		const result = activeHighlighter.codeToTokensBase(text, {
-			lang,
-			theme: themeName,
-		});
-		const fallback = dark ? FALLBACK_FG_DARK : FALLBACK_FG_LIGHT;
-		return result[0] ?? [{ content: text, color: fallback }];
-	} catch {
-		return [
-			{ content: text, color: dark ? FALLBACK_FG_DARK : FALLBACK_FG_LIGHT },
-		];
-	}
+  try {
+    const result = activeHighlighter.codeToTokensBase(text, {
+      lang,
+      theme: themeName,
+    });
+    const fallback = dark ? FALLBACK_FG_DARK : FALLBACK_FG_LIGHT;
+    return result[0] ?? [{ content: text, color: fallback }];
+  } catch {
+    return [{ content: text, color: dark ? FALLBACK_FG_DARK : FALLBACK_FG_LIGHT }];
+  }
 }
 
 function hasUserTheme(): boolean {
-	if (!highlighter) return false;
-	try {
-		return highlighter.getLoadedThemes().includes(USER_THEME_NAME);
-	} catch {
-		return false;
-	}
+  if (!highlighter) return false;
+  try {
+    return highlighter.getLoadedThemes().includes(USER_THEME_NAME);
+  } catch {
+    return false;
+  }
 }
 
 // ── SVG rendering ──────────────────────────────────────────────────────
@@ -530,252 +485,224 @@ function hasUserTheme(): boolean {
 let svgCacheDir: string | null = null;
 
 function getSvgCacheDir(): string {
-	if (!svgCacheDir) {
-		svgCacheDir = path.join(os.tmpdir(), "nesweep-svg-cache");
-		if (!fs.existsSync(svgCacheDir)) {
-			fs.mkdirSync(svgCacheDir, { recursive: true });
-		}
-	}
-	return svgCacheDir;
+  if (!svgCacheDir) {
+    svgCacheDir = path.join(os.tmpdir(), "nesweep-svg-cache");
+    if (!fs.existsSync(svgCacheDir)) {
+      fs.mkdirSync(svgCacheDir, { recursive: true });
+    }
+  }
+  return svgCacheDir;
 }
 
 function clearSvgCache(): void {
-	try {
-		const dir = getSvgCacheDir();
-		for (const file of fs.readdirSync(dir)) {
-			if (file.startsWith("hl-")) {
-				fs.unlinkSync(path.join(dir, file));
-			}
-		}
-	} catch {
-		// Ignore cleanup errors
-	}
+  try {
+    const dir = getSvgCacheDir();
+    for (const file of fs.readdirSync(dir)) {
+      if (file.startsWith("hl-")) {
+        fs.unlinkSync(path.join(dir, file));
+      }
+    }
+  } catch {
+    // Ignore cleanup errors
+  }
 }
 
 function escapeXml(text: string): string {
-	return text
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;")
-		.replace(/'/g, "&apos;");
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
 function renderSyntaxHighlightedSvgFromLines(
-	lines: string[],
-	languageId: string,
-	dark: boolean,
-	highlightRangesByLine: HighlightRange[][],
-	cachePrefix: string,
+  lines: string[],
+  languageId: string,
+  dark: boolean,
+  highlightRangesByLine: HighlightRange[][],
+  cachePrefix: string,
 ): vscode.Uri {
-	const settings = getEditorFontSettings();
-	const lineHeight =
-		settings.lineHeight > 0
-			? settings.lineHeight
-			: Math.ceil(settings.fontSize * 1.35);
-	const fontSize = settings.fontSize;
-	const textY = Math.ceil(lineHeight - settings.fontSize * 0.25);
-	const charWidth = settings.fontSize * 0.6;
-	const safeLines = lines.length > 0 ? lines : [""];
+  const settings = getEditorFontSettings();
+  const lineHeight =
+    settings.lineHeight > 0 ? settings.lineHeight : Math.ceil(settings.fontSize * 1.35);
+  const fontSize = settings.fontSize;
+  const textY = Math.ceil(lineHeight - settings.fontSize * 0.25);
+  const charWidth = settings.fontSize * 0.6;
+  const safeLines = lines.length > 0 ? lines : [""];
 
-	const expandedLines = safeLines.map((line) =>
-		expandTabs(line, settings.tabSize),
-	);
-	const tokensByLine = expandedLines.map(({ expanded }) =>
-		tokenizeWithShiki(expanded, languageId, dark),
-	);
-	const lineWidths = expandedLines.map(
-		({ expanded }) => expanded.length * charWidth,
-	);
-	const totalWidth = Math.max(1, ...lineWidths);
-	const totalHeight = lineHeight * safeLines.length;
+  const expandedLines = safeLines.map((line) => expandTabs(line, settings.tabSize));
+  const tokensByLine = expandedLines.map(({ expanded }) =>
+    tokenizeWithShiki(expanded, languageId, dark),
+  );
+  const lineWidths = expandedLines.map(({ expanded }) => expanded.length * charWidth);
+  const totalWidth = Math.max(1, ...lineWidths);
+  const totalHeight = lineHeight * safeLines.length;
 
-	const rects: string[] = [];
-	for (let lineIndex = 0; lineIndex < safeLines.length; lineIndex++) {
-		const lineText = safeLines[lineIndex];
-		if (lineText === undefined) continue;
-		const ranges = highlightRangesByLine[lineIndex] ?? [];
-		const expandedLine = expandedLines[lineIndex];
-		if (!expandedLine) continue;
-		const { indexMap } = expandedLine;
-		for (const range of ranges) {
-			const start = Math.max(0, Math.min(range.start, lineText.length));
-			const end = Math.max(start, Math.min(range.end, lineText.length));
-			if (end <= start) continue;
-			const mappedStart = indexMap[start] ?? start;
-			const mappedEnd = indexMap[end] ?? end;
-			const x = mappedStart * charWidth;
-			const width = (mappedEnd - mappedStart) * charWidth;
-			const y = lineIndex * lineHeight;
-			rects.push(
-				`<rect x="${x}" y="${y}" width="${width}" height="${lineHeight}" rx="0" ry="0" fill="${range.color}"/>`,
-			);
-		}
-	}
+  const rects: string[] = [];
+  for (let lineIndex = 0; lineIndex < safeLines.length; lineIndex++) {
+    const lineText = safeLines[lineIndex];
+    if (lineText === undefined) continue;
+    const ranges = highlightRangesByLine[lineIndex] ?? [];
+    const expandedLine = expandedLines[lineIndex];
+    if (!expandedLine) continue;
+    const { indexMap } = expandedLine;
+    for (const range of ranges) {
+      const start = Math.max(0, Math.min(range.start, lineText.length));
+      const end = Math.max(start, Math.min(range.end, lineText.length));
+      if (end <= start) continue;
+      const mappedStart = indexMap[start] ?? start;
+      const mappedEnd = indexMap[end] ?? end;
+      const x = mappedStart * charWidth;
+      const width = (mappedEnd - mappedStart) * charWidth;
+      const y = lineIndex * lineHeight;
+      rects.push(
+        `<rect x="${x}" y="${y}" width="${width}" height="${lineHeight}" rx="0" ry="0" fill="${range.color}"/>`,
+      );
+    }
+  }
 
-	const textElements: string[] = [];
-	for (let lineIndex = 0; lineIndex < safeLines.length; lineIndex++) {
-		const tokens = tokensByLine[lineIndex];
-		if (!tokens || tokens.length === 0) continue;
-		const tspans: string[] = [];
-		for (const token of tokens) {
-			const color =
-				token.color ?? (dark ? FALLBACK_FG_DARK : FALLBACK_FG_LIGHT);
-			const escapedText = escapeXml(token.content);
-			const displayText = escapedText.replace(/ /g, "&#160;");
-			tspans.push(`<tspan fill="${color}">${displayText}</tspan>`);
-		}
-		const y = lineIndex * lineHeight + textY;
-		const lineWidth = lineWidths[lineIndex];
-		if (lineWidth === undefined) continue;
-		const textLengthAttr =
-			lineWidth > 0
-				? ` textLength="${lineWidth}" lengthAdjust="spacingAndGlyphs"`
-				: "";
-		textElements.push(
-			`<text x="0" y="${y}" font-family="${escapeXml(
-				settings.fontFamily,
-			)}" font-size="${fontSize}px"${textLengthAttr}
+  const textElements: string[] = [];
+  for (let lineIndex = 0; lineIndex < safeLines.length; lineIndex++) {
+    const tokens = tokensByLine[lineIndex];
+    if (!tokens || tokens.length === 0) continue;
+    const tspans: string[] = [];
+    for (const token of tokens) {
+      const color = token.color ?? (dark ? FALLBACK_FG_DARK : FALLBACK_FG_LIGHT);
+      const escapedText = escapeXml(token.content);
+      const displayText = escapedText.replace(/ /g, "&#160;");
+      tspans.push(`<tspan fill="${color}">${displayText}</tspan>`);
+    }
+    const y = lineIndex * lineHeight + textY;
+    const lineWidth = lineWidths[lineIndex];
+    if (lineWidth === undefined) continue;
+    const textLengthAttr =
+      lineWidth > 0 ? ` textLength="${lineWidth}" lengthAdjust="spacingAndGlyphs"` : "";
+    textElements.push(
+      `<text x="0" y="${y}" font-family="${escapeXml(
+        settings.fontFamily,
+      )}" font-size="${fontSize}px"${textLengthAttr}
         font-variant-ligatures="${settings.ligatures ? "normal" : "none"}"
         style="font-feature-settings: ${
-					settings.ligatures ? "'liga' 1, 'calt' 1" : "'liga' 0, 'calt' 0"
-				};">
+          settings.ligatures ? "'liga' 1, 'calt' 1" : "'liga' 0, 'calt' 0"
+        };">
     ${tspans.join("")}
   </text>`,
-		);
-	}
+    );
+  }
 
-	const backgroundColor = getEditorBackgroundColor(dark);
-	const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalWidth} ${totalHeight}" width="${totalWidth}" height="${totalHeight}">
+  const backgroundColor = getEditorBackgroundColor(dark);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalWidth} ${totalHeight}" width="${totalWidth}" height="${totalHeight}">
   <rect x="0" y="0" width="${totalWidth}" height="${totalHeight}" fill="${backgroundColor}"
         stroke="${dark ? "rgba(110, 110, 110, 0.35)" : "rgba(130, 130, 130, 0.35)"}" stroke-width="1"/>
   ${rects.join("")}
   ${textElements.join("")}
 </svg>`;
 
-	const themeSetting = getActiveThemeSetting() ?? "";
-	const hash = Buffer.from(
-		cachePrefix +
-			safeLines.join("\n") +
-			languageId +
-			dark +
-			JSON.stringify(highlightRangesByLine) +
-			JSON.stringify(settings) +
-			backgroundColor +
-			themeSetting +
-			themeVersion.toString(),
-	)
-		.toString("base64url")
-		.slice(0, 16);
-	const svgPath = path.join(getSvgCacheDir(), `${cachePrefix}-${hash}.svg`);
-	fs.writeFileSync(svgPath, svg, "utf8");
+  const themeSetting = getActiveThemeSetting() ?? "";
+  const hash = Buffer.from(
+    cachePrefix +
+      safeLines.join("\n") +
+      languageId +
+      dark +
+      JSON.stringify(highlightRangesByLine) +
+      JSON.stringify(settings) +
+      backgroundColor +
+      themeSetting +
+      themeVersion.toString(),
+  )
+    .toString("base64url")
+    .slice(0, 16);
+  const svgPath = path.join(getSvgCacheDir(), `${cachePrefix}-${hash}.svg`);
+  fs.writeFileSync(svgPath, svg, "utf8");
 
-	return vscode.Uri.file(svgPath);
+  return vscode.Uri.file(svgPath);
 }
 
 export function generateSyntaxHighlightedSvg(
-	text: string,
-	languageId: string,
-	dark: boolean,
-	highlightRanges: HighlightRange[] = [],
+  text: string,
+  languageId: string,
+  dark: boolean,
+  highlightRanges: HighlightRange[] = [],
 ): vscode.Uri {
-	return renderSyntaxHighlightedSvgFromLines(
-		[text],
-		languageId,
-		dark,
-		[highlightRanges],
-		"hl",
-	);
+  return renderSyntaxHighlightedSvgFromLines([text], languageId, dark, [highlightRanges], "hl");
 }
 
 export function generateSyntaxHighlightedSvgMultiline(
-	lines: string[],
-	languageId: string,
-	dark: boolean,
-	highlightRangesByLine: HighlightRange[][] = [],
+  lines: string[],
+  languageId: string,
+  dark: boolean,
+  highlightRangesByLine: HighlightRange[][] = [],
 ): vscode.Uri {
-	return renderSyntaxHighlightedSvgFromLines(
-		lines,
-		languageId,
-		dark,
-		highlightRangesByLine,
-		"hlm",
-	);
+  return renderSyntaxHighlightedSvgFromLines(lines, languageId, dark, highlightRangesByLine, "hlm");
 }
 
 // ── Theme detection ────────────────────────────────────────────────────
 
 export function isDarkTheme(): boolean {
-	const colorTheme = vscode.window.activeColorTheme;
-	return (
-		colorTheme.kind === vscode.ColorThemeKind.Dark ||
-		colorTheme.kind === vscode.ColorThemeKind.HighContrast
-	);
+  const colorTheme = vscode.window.activeColorTheme;
+  return (
+    colorTheme.kind === vscode.ColorThemeKind.Dark ||
+    colorTheme.kind === vscode.ColorThemeKind.HighContrast
+  );
 }
 
 // ── Decoration helper ──────────────────────────────────────────────────
 
 export interface HighlightRange {
-	start: number;
-	end: number;
-	color: string;
+  start: number;
+  end: number;
+  color: string;
 }
 
 export function createHighlightedBoxDecoration(
-	text: string,
-	languageId: string,
-	range: vscode.Range,
-	highlightRanges: HighlightRange[] = [],
+  text: string,
+  languageId: string,
+  range: vscode.Range,
+  highlightRanges: HighlightRange[] = [],
 ): vscode.DecorationOptions {
-	const dark = isDarkTheme();
-	const svgUri = generateSyntaxHighlightedSvg(
-		text,
-		languageId,
-		dark,
-		highlightRanges,
-	);
+  const dark = isDarkTheme();
+  const svgUri = generateSyntaxHighlightedSvg(text, languageId, dark, highlightRanges);
 
-	return {
-		range,
-		renderOptions: {
-			after: {
-				contentIconPath: svgUri,
-				textDecoration: buildBoxTextDecoration("-40%"),
-			},
-		},
-	};
+  return {
+    range,
+    renderOptions: {
+      after: {
+        contentIconPath: svgUri,
+        textDecoration: buildBoxTextDecoration("-40%"),
+      },
+    },
+  };
 }
 
 export function createHighlightedBoxDecorationMultiline(
-	lines: string[],
-	languageId: string,
-	range: vscode.Range,
-	highlightRangesByLine: HighlightRange[][] = [],
+  lines: string[],
+  languageId: string,
+  range: vscode.Range,
+  highlightRangesByLine: HighlightRange[][] = [],
 ): vscode.DecorationOptions {
-	const dark = isDarkTheme();
-	const svgUri = generateSyntaxHighlightedSvgMultiline(
-		lines,
-		languageId,
-		dark,
-		highlightRangesByLine,
-	);
-	const settings = getEditorFontSettings();
-	const lineHeight =
-		settings.lineHeight > 0
-			? settings.lineHeight
-			: Math.ceil(settings.fontSize * 1.35);
+  const dark = isDarkTheme();
+  const svgUri = generateSyntaxHighlightedSvgMultiline(
+    lines,
+    languageId,
+    dark,
+    highlightRangesByLine,
+  );
+  const settings = getEditorFontSettings();
+  const lineHeight =
+    settings.lineHeight > 0 ? settings.lineHeight : Math.ceil(settings.fontSize * 1.35);
 
-	return {
-		range,
-		renderOptions: {
-			after: {
-				contentIconPath: svgUri,
-				textDecoration: buildBoxTextDecoration(`-${lineHeight / 2}px`),
-			},
-		},
-	};
+  return {
+    range,
+    renderOptions: {
+      after: {
+        contentIconPath: svgUri,
+        textDecoration: buildBoxTextDecoration(`-${lineHeight / 2}px`),
+      },
+    },
+  };
 }
 
 function buildBoxTextDecoration(translateY: string): string {
-	return `none; position: absolute; top: 50%; transform: translateY(${translateY}); margin-left: 12px`;
+  return `none; position: absolute; top: 50%; transform: translateY(${translateY}); margin-left: 12px`;
 }

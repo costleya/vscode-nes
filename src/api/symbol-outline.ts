@@ -4,80 +4,80 @@
 // an Extension Host.
 
 interface PositionLike {
-	line: number;
+  line: number;
 }
 
 interface RangeLike {
-	start: PositionLike;
-	end: PositionLike;
+  start: PositionLike;
+  end: PositionLike;
 }
 
 export interface DocumentSymbolLike {
-	name: string;
-	detail?: string;
-	kind: number;
-	range: RangeLike;
-	children?: readonly DocumentSymbolLike[];
+  name: string;
+  detail?: string;
+  kind: number;
+  range: RangeLike;
+  children?: readonly DocumentSymbolLike[];
 }
 
 export interface SymbolInformationLike {
-	name: string;
-	containerName?: string;
-	kind: number;
-	location: {
-		range: RangeLike;
-	};
+  name: string;
+  containerName?: string;
+  kind: number;
+  location: {
+    range: RangeLike;
+  };
 }
 
 export type OutlineSymbolLike = DocumentSymbolLike | SymbolInformationLike;
 
 interface OutlineEntry {
-	path: string;
-	detail: string;
-	startLine: number;
-	endLine: number;
+  path: string;
+  detail: string;
+  startLine: number;
+  endLine: number;
 }
 
 interface ActiveEntry {
-	path: string;
-	depth: number;
-	span: number;
+  path: string;
+  depth: number;
+  span: number;
 }
 
 // Numeric values are stable parts of vscode.SymbolKind. Keeping them local
 // avoids a runtime vscode import in this pure helper.
 const SYMBOL_KIND = {
-	module: 1,
-	namespace: 2,
-	package: 3,
-	class: 4,
-	method: 5,
-	constructor: 8,
-	enum: 9,
-	interface: 10,
-	function: 11,
-	struct: 22,
-	operator: 24,
-	property: 6,
-	field: 7,
-	variable: 12,
-	constant: 13,
-	enumMember: 21,
-	typeParameter: 25,
+  module: 1,
+  namespace: 2,
+  package: 3,
+  class: 4,
+  method: 5,
+  constructor: 8,
+  enum: 9,
+  interface: 10,
+  function: 11,
+  struct: 22,
+  operator: 24,
+  property: 6,
+  field: 7,
+  variable: 12,
+  constant: 13,
+  enumMember: 21,
+  typeParameter: 25,
 } as const;
 
 const PATH_KINDS = new Set<number>([
-	SYMBOL_KIND.module,
-	SYMBOL_KIND.namespace,
-	SYMBOL_KIND.package,
-	SYMBOL_KIND.class,
-	SYMBOL_KIND.method,
-	SYMBOL_KIND.constructor,
-	SYMBOL_KIND.enum,
-	SYMBOL_KIND.interface,
-	SYMBOL_KIND.function,
-	SYMBOL_KIND.struct,
-	SYMBOL_KIND.operator,
+  SYMBOL_KIND.module,
+  SYMBOL_KIND.namespace,
+  SYMBOL_KIND.package,
+  SYMBOL_KIND.class,
+  SYMBOL_KIND.method,
+  SYMBOL_KIND.constructor,
+  SYMBOL_KIND.enum,
+  SYMBOL_KIND.interface,
+  SYMBOL_KIND.function,
+  SYMBOL_KIND.struct,
+  SYMBOL_KIND.operator,
 ]);
 
 // `outlineSymbols` is a symbol budget, not a callable-only budget. C/C++
@@ -86,151 +86,131 @@ const PATH_KINDS = new Set<number>([
 // collapse to just the active class. Keep containers too: they describe the
 // surrounding API when there are no leaf symbols.
 const CONTEXT_SYMBOL_KINDS = new Set<number>([
-	...PATH_KINDS,
-	SYMBOL_KIND.property,
-	SYMBOL_KIND.field,
-	SYMBOL_KIND.variable,
-	SYMBOL_KIND.constant,
-	SYMBOL_KIND.enumMember,
-	SYMBOL_KIND.typeParameter,
+  ...PATH_KINDS,
+  SYMBOL_KIND.property,
+  SYMBOL_KIND.field,
+  SYMBOL_KIND.variable,
+  SYMBOL_KIND.constant,
+  SYMBOL_KIND.enumMember,
+  SYMBOL_KIND.typeParameter,
 ]);
 
 export function formatSymbolOutline(
-	symbols: readonly OutlineSymbolLike[],
-	cursorLine0: number,
-	maxSymbols: number,
+  symbols: readonly OutlineSymbolLike[],
+  cursorLine0: number,
+  maxSymbols: number,
 ): string {
-	const limit = Math.max(0, Math.floor(maxSymbols));
-	if (limit === 0 || symbols.length === 0) return "";
+  const limit = Math.max(0, Math.floor(maxSymbols));
+  if (limit === 0 || symbols.length === 0) return "";
 
-	const entries: OutlineEntry[] = [];
-	let active: ActiveEntry | null = null;
+  const entries: OutlineEntry[] = [];
+  let active: ActiveEntry | null = null;
 
-	const considerActive = (
-		path: string,
-		range: RangeLike,
-		depth: number,
-	): void => {
-		if (!rangeContainsLine(range, cursorLine0)) return;
-		const span = Math.max(0, range.end.line - range.start.line);
-		if (
-			active === null ||
-			depth > active.depth ||
-			(depth === active.depth && span < active.span)
-		) {
-			active = { path, depth, span };
-		}
-	};
+  const considerActive = (path: string, range: RangeLike, depth: number): void => {
+    if (!rangeContainsLine(range, cursorLine0)) return;
+    const span = Math.max(0, range.end.line - range.start.line);
+    if (active === null || depth > active.depth || (depth === active.depth && span < active.span)) {
+      active = { path, depth, span };
+    }
+  };
 
-	const visitDocumentSymbol = (
-		symbol: DocumentSymbolLike,
-		parents: readonly string[],
-	): void => {
-		const name = cleanInlineText(symbol.name, 120);
-		const extendsPath = PATH_KINDS.has(symbol.kind) && name !== "";
-		const pathParts = extendsPath ? [...parents, name] : [...parents];
-		const path = pathParts.join("::");
-		const displayPath = extendsPath ? path : [...parents, name].join("::");
+  const visitDocumentSymbol = (symbol: DocumentSymbolLike, parents: readonly string[]): void => {
+    const name = cleanInlineText(symbol.name, 120);
+    const extendsPath = PATH_KINDS.has(symbol.kind) && name !== "";
+    const pathParts = extendsPath ? [...parents, name] : [...parents];
+    const path = pathParts.join("::");
+    const displayPath = extendsPath ? path : [...parents, name].join("::");
 
-		if (extendsPath) {
-			considerActive(path, symbol.range, pathParts.length);
-		}
-		if (CONTEXT_SYMBOL_KINDS.has(symbol.kind) && displayPath !== "") {
-			entries.push({
-				path: displayPath,
-				detail: cleanInlineText(symbol.detail ?? "", 160),
-				startLine: symbol.range.start.line,
-				endLine: symbol.range.end.line,
-			});
-		}
+    if (extendsPath) {
+      considerActive(path, symbol.range, pathParts.length);
+    }
+    if (CONTEXT_SYMBOL_KINDS.has(symbol.kind) && displayPath !== "") {
+      entries.push({
+        path: displayPath,
+        detail: cleanInlineText(symbol.detail ?? "", 160),
+        startLine: symbol.range.start.line,
+        endLine: symbol.range.end.line,
+      });
+    }
 
-		for (const child of symbol.children ?? []) {
-			visitDocumentSymbol(child, pathParts);
-		}
-	};
+    for (const child of symbol.children ?? []) {
+      visitDocumentSymbol(child, pathParts);
+    }
+  };
 
-	for (const symbol of symbols) {
-		if (isSymbolInformation(symbol)) {
-			const name = cleanInlineText(symbol.name, 120);
-			const container = cleanInlineText(symbol.containerName ?? "", 120);
-			const path = [container, name].filter(Boolean).join("::");
-			if (PATH_KINDS.has(symbol.kind) && path !== "") {
-				considerActive(path, symbol.location.range, container ? 2 : 1);
-			}
-			if (CONTEXT_SYMBOL_KINDS.has(symbol.kind) && path !== "") {
-				entries.push({
-					path,
-					detail: "",
-					startLine: symbol.location.range.start.line,
-					endLine: symbol.location.range.end.line,
-				});
-			}
-		} else {
-			visitDocumentSymbol(symbol, []);
-		}
-	}
+  for (const symbol of symbols) {
+    if (isSymbolInformation(symbol)) {
+      const name = cleanInlineText(symbol.name, 120);
+      const container = cleanInlineText(symbol.containerName ?? "", 120);
+      const path = [container, name].filter(Boolean).join("::");
+      if (PATH_KINDS.has(symbol.kind) && path !== "") {
+        considerActive(path, symbol.location.range, container ? 2 : 1);
+      }
+      if (CONTEXT_SYMBOL_KINDS.has(symbol.kind) && path !== "") {
+        entries.push({
+          path,
+          detail: "",
+          startLine: symbol.location.range.start.line,
+          endLine: symbol.location.range.end.line,
+        });
+      }
+    } else {
+      visitDocumentSymbol(symbol, []);
+    }
+  }
 
-	const selected = entries
-		.sort((a, b) => {
-			const distance =
-				distanceFromRange(a, cursorLine0) - distanceFromRange(b, cursorLine0);
-			if (distance !== 0) return distance;
-			if (a.startLine !== b.startLine) return a.startLine - b.startLine;
-			return a.path.localeCompare(b.path);
-		})
-		.slice(0, limit)
-		.sort((a, b) => {
-			if (a.startLine !== b.startLine) return a.startLine - b.startLine;
-			return a.path.localeCompare(b.path);
-		});
+  const selected = entries
+    .sort((a, b) => {
+      const distance = distanceFromRange(a, cursorLine0) - distanceFromRange(b, cursorLine0);
+      if (distance !== 0) return distance;
+      if (a.startLine !== b.startLine) return a.startLine - b.startLine;
+      return a.path.localeCompare(b.path);
+    })
+    .slice(0, limit)
+    .sort((a, b) => {
+      if (a.startLine !== b.startLine) return a.startLine - b.startLine;
+      return a.path.localeCompare(b.path);
+    });
 
-	// Native-preview TypeScript does not currently retain assignments made
-	// through the nested traversal callbacks, so make the post-traversal
-	// union explicit before narrowing it.
-	const resolvedActive = active as ActiveEntry | null;
-	if (selected.length === 0 && resolvedActive === null) return "";
+  // Native-preview TypeScript does not currently retain assignments made
+  // through the nested traversal callbacks, so make the post-traversal
+  // union explicit before narrowing it.
+  const resolvedActive = active as ActiveEntry | null;
+  if (selected.length === 0 && resolvedActive === null) return "";
 
-	const lines: string[] = [];
-	if (resolvedActive !== null) {
-		lines.push(`active_symbol: ${resolvedActive.path}`);
-	}
-	if (selected.length > 0) {
-		lines.push("nearby_symbols:");
-		for (const entry of selected) {
-			const detail =
-				entry.detail !== "" && !entry.path.includes(entry.detail)
-					? ` — ${entry.detail}`
-					: "";
-			const activeMarker =
-				resolvedActive !== null && resolvedActive.path === entry.path
-					? " [active]"
-					: "";
-			lines.push(
-				`- line ${entry.startLine + 1}: ${entry.path}${detail}${activeMarker}`,
-			);
-		}
-	}
-	return lines.join("\n");
+  const lines: string[] = [];
+  if (resolvedActive !== null) {
+    lines.push(`active_symbol: ${resolvedActive.path}`);
+  }
+  if (selected.length > 0) {
+    lines.push("nearby_symbols:");
+    for (const entry of selected) {
+      const detail =
+        entry.detail !== "" && !entry.path.includes(entry.detail) ? ` — ${entry.detail}` : "";
+      const activeMarker =
+        resolvedActive !== null && resolvedActive.path === entry.path ? " [active]" : "";
+      lines.push(`- line ${entry.startLine + 1}: ${entry.path}${detail}${activeMarker}`);
+    }
+  }
+  return lines.join("\n");
 }
 
-function isSymbolInformation(
-	symbol: OutlineSymbolLike,
-): symbol is SymbolInformationLike {
-	return "location" in symbol;
+function isSymbolInformation(symbol: OutlineSymbolLike): symbol is SymbolInformationLike {
+  return "location" in symbol;
 }
 
 function rangeContainsLine(range: RangeLike, line: number): boolean {
-	return range.start.line <= line && line <= range.end.line;
+  return range.start.line <= line && line <= range.end.line;
 }
 
 function distanceFromRange(entry: OutlineEntry, line: number): number {
-	if (line < entry.startLine) return entry.startLine - line;
-	if (line > entry.endLine) return line - entry.endLine;
-	return 0;
+  if (line < entry.startLine) return entry.startLine - line;
+  if (line > entry.endLine) return line - entry.endLine;
+  return 0;
 }
 
 function cleanInlineText(value: string, maxChars: number): string {
-	const cleaned = value.replace(/\s+/g, " ").trim();
-	if (cleaned.length <= maxChars) return cleaned;
-	return `${cleaned.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  if (cleaned.length <= maxChars) return cleaned;
+  return `${cleaned.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
 }

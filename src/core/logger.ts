@@ -19,45 +19,45 @@ import * as vscode from "vscode";
 let channel: vscode.LogOutputChannel | undefined;
 
 export function initLogger(): vscode.LogOutputChannel {
-	if (!channel) {
-		channel = vscode.window.createOutputChannel("NESweep", { log: true });
-	}
-	return channel;
+  if (!channel) {
+    channel = vscode.window.createOutputChannel("NESweep", { log: true });
+  }
+  return channel;
 }
 
 export function disposeLogger(): void {
-	channel?.dispose();
-	channel = undefined;
+  channel?.dispose();
+  channel = undefined;
 }
 
 function fmt(args: unknown[]): string {
-	return args
-		.map((arg) => {
-			if (typeof arg === "string") return arg;
-			if (arg instanceof Error) return arg.stack ?? arg.message;
-			try {
-				return JSON.stringify(arg);
-			} catch {
-				return String(arg);
-			}
-		})
-		.join(" ");
+  return args
+    .map((arg) => {
+      if (typeof arg === "string") return arg;
+      if (arg instanceof Error) return arg.stack ?? arg.message;
+      try {
+        return JSON.stringify(arg);
+      } catch {
+        return String(arg);
+      }
+    })
+    .join(" ");
 }
 
 export const logger = {
-	trace(...args: unknown[]): void {
-		channel?.trace(fmt(args));
-	},
-	debug(...args: unknown[]): void {
-		channel?.debug(fmt(args));
-	},
-	info(...args: unknown[]): void {
-		channel?.info(fmt(args));
-	},
-	warn(...args: unknown[]): void {
-		channel?.warn(fmt(args));
-	},
-	error(...args: unknown[]): void {
-		channel?.error(fmt(args));
-	},
+  trace(...args: unknown[]): void {
+    channel?.trace(fmt(args));
+  },
+  debug(...args: unknown[]): void {
+    channel?.debug(fmt(args));
+  },
+  info(...args: unknown[]): void {
+    channel?.info(fmt(args));
+  },
+  warn(...args: unknown[]): void {
+    channel?.warn(fmt(args));
+  },
+  error(...args: unknown[]): void {
+    channel?.error(fmt(args));
+  },
 };

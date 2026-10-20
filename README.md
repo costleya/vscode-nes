@@ -38,27 +38,27 @@ latency — is removed.
 
 ## Settings
 
-| Key | Default | Purpose |
-| --- | --- | --- |
-| `sweep.serverUrl` | `http://localhost:8080` | `/v1/completions` base URL |
-| `sweep.modelName` | `sweepai/sweep-next-edit` | `model` field in the request body; substring-matched to pick the prompt format |
-| `sweep.completionTimeoutMs` | `10000` | Per-request timeout (ms) |
-| `sweep.retriggerOnContextExit` | `false` | Opt in to requesting a completion after the cursor moves at least half the last model editable window, even with no text edit |
-| `sweep.contextExitRetriggerDebounceMs` | `1500` | Debounce for context-exit cursor retriggers, allowing navigation to settle; `0` uses the next event-loop turn |
-| `sweep.maxContextFiles` | `5` | Related excerpt cap; Zeta prioritizes LSP retrieval, then visible/recent buffers |
-| `sweep.outlineSymbols` | `0` | Optional nearby LSP symbols plus the active symbol path for every model. Includes methods, fields, enum members, and globals when provided; asynchronous and separate from `maxContextFiles`, a positive value opts in |
-| `sweep.maxRecentChangesChars` | `12000` | Character budget for formatted recent-edit history; `0` disables history |
-| `sweep.includeClipboardContext` | `true` | Include clipboard text as retrieval context; it is emitted last in retrieval |
-| `sweep.stableRetrievalOrdering` | `false` | Sort retrieval chunks deterministically to improve prefix-cache reuse |
-| `sweep.reuseIdenticalPromptResults` | `false` | Reuse recent temperature-0 results for byte-identical prompts |
-| `sweep.identicalPromptCacheTtlMs` | `5000` | TTL for identical-prompt result reuse |
-| `sweep.diagRadius` | `12` | ±N lines around cursor; `0` disables |
-| `sweep.editableTokens` | `2000` | Shared approximate active-file budget, estimated as UTF-8 bytes / 3 and snapped to whole lines. Sweep allocates 2/3 before and 1/3 after the cursor; Zeta uses it for its editable excerpt. |
-| `sweep.zetaContextTokens` | `150` | Approximate additional Zeta-2.1 current-file context budget, using the same tokenizer-free estimate |
-| `sweep.rulesMaxChars` | `3000` | Soft cap on per-language workspace-rules file size; overflow surfaces as a diagnostic + red background in the editor |
-| `sweep.injectInlineDiagnostics` | `false` | Inline `BUG:` comments next to diagnosed lines in the prompt — recommended for 0.5B / 1.5B sweep checkpoints |
-| `sweep.inlineDiagnosticsMarker` | `BUG: LSP error here` | Marker phrase used by the inline injection + response-side strip anchor |
-| `sweep.diagnosticsMessageTransforms` | clang preset | `{regex: replacement}` rewrites applied to every diagnostic message after the built-in normalisations |
+| Key                                    | Default                   | Purpose                                                                                                                                                                                                                |
+| -------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sweep.serverUrl`                      | `http://localhost:8080`   | `/v1/completions` base URL                                                                                                                                                                                             |
+| `sweep.modelName`                      | `sweepai/sweep-next-edit` | `model` field in the request body; substring-matched to pick the prompt format                                                                                                                                         |
+| `sweep.completionTimeoutMs`            | `10000`                   | Per-request timeout (ms)                                                                                                                                                                                               |
+| `sweep.retriggerOnContextExit`         | `false`                   | Opt in to requesting a completion after the cursor moves at least half the last model editable window, even with no text edit                                                                                          |
+| `sweep.contextExitRetriggerDebounceMs` | `1500`                    | Debounce for context-exit cursor retriggers, allowing navigation to settle; `0` uses the next event-loop turn                                                                                                          |
+| `sweep.maxContextFiles`                | `5`                       | Related excerpt cap; Zeta prioritizes LSP retrieval, then visible/recent buffers                                                                                                                                       |
+| `sweep.outlineSymbols`                 | `0`                       | Optional nearby LSP symbols plus the active symbol path for every model. Includes methods, fields, enum members, and globals when provided; asynchronous and separate from `maxContextFiles`, a positive value opts in |
+| `sweep.maxRecentChangesChars`          | `12000`                   | Character budget for formatted recent-edit history; `0` disables history                                                                                                                                               |
+| `sweep.includeClipboardContext`        | `true`                    | Include clipboard text as retrieval context; it is emitted last in retrieval                                                                                                                                           |
+| `sweep.stableRetrievalOrdering`        | `false`                   | Sort retrieval chunks deterministically to improve prefix-cache reuse                                                                                                                                                  |
+| `sweep.reuseIdenticalPromptResults`    | `false`                   | Reuse recent temperature-0 results for byte-identical prompts                                                                                                                                                          |
+| `sweep.identicalPromptCacheTtlMs`      | `5000`                    | TTL for identical-prompt result reuse                                                                                                                                                                                  |
+| `sweep.diagRadius`                     | `12`                      | ±N lines around cursor; `0` disables                                                                                                                                                                                   |
+| `sweep.editableTokens`                 | `2000`                    | Shared approximate active-file budget, estimated as UTF-8 bytes / 3 and snapped to whole lines. Sweep allocates 2/3 before and 1/3 after the cursor; Zeta uses it for its editable excerpt.                            |
+| `sweep.zetaContextTokens`              | `150`                     | Approximate additional Zeta-2.1 current-file context budget, using the same tokenizer-free estimate                                                                                                                    |
+| `sweep.rulesMaxChars`                  | `3000`                    | Soft cap on per-language workspace-rules file size; overflow surfaces as a diagnostic + red background in the editor                                                                                                   |
+| `sweep.injectInlineDiagnostics`        | `false`                   | Inline `BUG:` comments next to diagnosed lines in the prompt — recommended for 0.5B / 1.5B sweep checkpoints                                                                                                           |
+| `sweep.inlineDiagnosticsMarker`        | `BUG: LSP error here`     | Marker phrase used by the inline injection + response-side strip anchor                                                                                                                                                |
+| `sweep.diagnosticsMessageTransforms`   | clang preset              | `{regex: replacement}` rewrites applied to every diagnostic message after the built-in normalisations                                                                                                                  |
 
 Zeta always uses the suffix-first FIM layout and chronological context order
 from its Zed training template. This prioritises edit quality over llama.cpp
@@ -107,7 +107,11 @@ pnpm exec vsce package --no-dependencies --skip-license
 code --install-extension nesweep-*.vsix --force
 ```
 
-Development checks: `pnpm lint`, `pnpm typecheck`, and `pnpm test`.
+Development uses Vite+ (`vite.config.ts`): `pnpm lint` checks formatting, lint
+rules, and TypeScript; `pnpm typecheck` runs lint and TypeScript checks; and
+`pnpm test` runs the unit tests. Use `pnpm fix` to apply formatting and safe lint
+fixes, or `pnpm format` to format files. `pnpm build` bundles the extension and
+its runtime dependencies into `out/extension.mjs` for packaging.
 
 ## Credits
 

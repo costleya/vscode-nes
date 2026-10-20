@@ -1,4 +1,13 @@
 allowBuilds:
-  esbuild: true
-  '@vscode/vsce-sign': false
+  "@vscode/vsce-sign": false
   keytar: false
+catalog:
+  vite: npm:@voidzero-dev/vite-plus-core@1.3.0
+  vite-plus: 1.3.0
+overrides:
+  vite@*: "catalog:"
+peerDependencyRules:
+  allowAny:
+    - vite
+  allowedVersions:
+    vite: "*"

@@ -16,46 +16,46 @@ import * as vscode from "vscode";
 // well-defined single-line comment style are intentionally omitted; the
 // rules file is silently ignored for those.
 const COMMENT_PREFIXES: Record<string, string> = {
-	c: "//",
-	cpp: "//",
-	java: "//",
-	javascript: "//",
-	javascriptreact: "//",
-	typescript: "//",
-	typescriptreact: "//",
-	rust: "//",
-	go: "//",
-	csharp: "//",
-	swift: "//",
-	kotlin: "//",
-	scala: "//",
-	dart: "//",
-	objectivec: "//",
-	objectivecpp: "//",
-	glsl: "//",
-	hlsl: "//",
-	jsonc: "//",
-	proto3: "//",
-	lua: "--",
-	haskell: "--",
-	sql: "--",
-	elm: "--",
-	python: "#",
-	shellscript: "#",
-	yaml: "#",
-	toml: "#",
-	perl: "#",
-	ruby: "#",
-	makefile: "#",
-	dockerfile: "#",
-	powershell: "#",
-	r: "#",
-	elixir: "#",
+  c: "//",
+  cpp: "//",
+  java: "//",
+  javascript: "//",
+  javascriptreact: "//",
+  typescript: "//",
+  typescriptreact: "//",
+  rust: "//",
+  go: "//",
+  csharp: "//",
+  swift: "//",
+  kotlin: "//",
+  scala: "//",
+  dart: "//",
+  objectivec: "//",
+  objectivecpp: "//",
+  glsl: "//",
+  hlsl: "//",
+  jsonc: "//",
+  proto3: "//",
+  lua: "--",
+  haskell: "--",
+  sql: "--",
+  elm: "--",
+  python: "#",
+  shellscript: "#",
+  yaml: "#",
+  toml: "#",
+  perl: "#",
+  ruby: "#",
+  makefile: "#",
+  dockerfile: "#",
+  powershell: "#",
+  r: "#",
+  elixir: "#",
 };
 
 interface CachedRules {
-	mtimeMs: number;
-	text: string;
+  mtimeMs: number;
+  text: string;
 }
 
 const cache = new Map<string, CachedRules>();
@@ -65,7 +65,7 @@ const cache = new Map<string, CachedRules>();
 // caller features (rule injection, diagnostics formatting) still work
 // instead of going silent.
 export function getCommentPrefix(languageId: string): string {
-	return COMMENT_PREFIXES[languageId] ?? "//";
+  return COMMENT_PREFIXES[languageId] ?? "//";
 }
 
 // Path of the rules file for `document`, or null if either the document
@@ -73,59 +73,59 @@ export function getCommentPrefix(languageId: string): string {
 // single-line comment style (in which case the file would be silently
 // ignored anyway — see loadWorkspaceRules).
 export function getRulesFilePath(document: vscode.TextDocument): string | null {
-	const ws = vscode.workspace.getWorkspaceFolder(document.uri);
-	if (!ws) return null;
-	const lang = document.languageId;
-	if (!Object.hasOwn(COMMENT_PREFIXES, lang)) return null;
-	return path.join(ws.uri.fsPath, ".vscode", `nes-${lang}.md`);
+  const ws = vscode.workspace.getWorkspaceFolder(document.uri);
+  if (!ws) return null;
+  const lang = document.languageId;
+  if (!Object.hasOwn(COMMENT_PREFIXES, lang)) return null;
+  return path.join(ws.uri.fsPath, ".vscode", `nes-${lang}.md`);
 }
 
 export function loadWorkspaceRules(document: vscode.TextDocument): string {
-	const ws = vscode.workspace.getWorkspaceFolder(document.uri);
-	if (!ws) return "";
-	const lang = document.languageId;
-	const comment = COMMENT_PREFIXES[lang];
-	if (!comment) return "";
-	const file = path.join(ws.uri.fsPath, ".vscode", `nes-${lang}.md`);
+  const ws = vscode.workspace.getWorkspaceFolder(document.uri);
+  if (!ws) return "";
+  const lang = document.languageId;
+  const comment = COMMENT_PREFIXES[lang];
+  if (!comment) return "";
+  const file = path.join(ws.uri.fsPath, ".vscode", `nes-${lang}.md`);
 
-	let mtimeMs: number;
-	try {
-		mtimeMs = fs.statSync(file).mtimeMs;
-	} catch {
-		// stat() failures cache as "no rules" so we don't pay the syscall
-		// every keystroke when the rules file simply isn't there.
-		cache.set(file, { mtimeMs: 0, text: "" });
-		return "";
-	}
-	const cached = cache.get(file);
-	if (cached && cached.mtimeMs === mtimeMs) return cached.text;
+  let mtimeMs: number;
+  try {
+    mtimeMs = fs.statSync(file).mtimeMs;
+  } catch {
+    // stat() failures cache as "no rules" so we don't pay the syscall
+    // every keystroke when the rules file simply isn't there.
+    cache.set(file, { mtimeMs: 0, text: "" });
+    return "";
+  }
+  const cached = cache.get(file);
+  if (cached && cached.mtimeMs === mtimeMs) return cached.text;
 
-	let body: string;
-	try {
-		body = fs.readFileSync(file, "utf8").trim();
-	} catch {
-		cache.set(file, { mtimeMs, text: "" });
-		return "";
-	}
-	if (body === "") {
-		cache.set(file, { mtimeMs, text: "" });
-		return "";
-	}
+  let body: string;
+  try {
+    body = fs.readFileSync(file, "utf8").trim();
+  } catch {
+    cache.set(file, { mtimeMs, text: "" });
+    return "";
+  }
+  if (body === "") {
+    cache.set(file, { mtimeMs, text: "" });
+    return "";
+  }
 
-	const wrapped = wrapAsComment(body, comment);
-	cache.set(file, { mtimeMs, text: wrapped });
-	return wrapped;
+  const wrapped = wrapAsComment(body, comment);
+  cache.set(file, { mtimeMs, text: wrapped });
+  return wrapped;
 }
 
 function wrapAsComment(body: string, comment: string): string {
-	const out: string[] = [];
-	for (const line of body.split("\n")) {
-		if (line === "") {
-			out.push(comment);
-		} else {
-			out.push(`${comment} ${line}`);
-		}
-	}
-	out.push(""); // trailing newline so the splice point is line-aligned
-	return out.join("\n");
+  const out: string[] = [];
+  for (const line of body.split("\n")) {
+    if (line === "") {
+      out.push(comment);
+    } else {
+      out.push(`${comment} ${line}`);
+    }
+  }
+  out.push(""); // trailing newline so the splice point is line-aligned
+  return out.join("\n");
 }
