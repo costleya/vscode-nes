@@ -3,7 +3,7 @@
 // The channel:
 //   - shows up in the Output panel as "NESweep"
 //   - is written to disk by VS Code at
-//       <userData>/logs/<session>/window<N>/exthost/sr-tream.nesweep/NESweep.log
+//       <userData>/logs/<session>/window<N>/exthost/s-obvious.nesweep/NESweep.log
 //   - honours per-channel log level (Command Palette →
 //       "Developer: Set Log Level..." → NESweep) which gates trace/debug/info.
 //

@@ -21,9 +21,9 @@ describe("inline completion provider registration", () => {
     yieldTo: ["preferred-provider"],
   };
   const proposalDenial = new Error(
-    "Extension 'sr-team.nesweep' CANNOT use API proposal: inlineCompletionsAdditions.\n" +
+    "Extension 's-obvious.nesweep' CANNOT use API proposal: inlineCompletionsAdditions.\n" +
       "Its package.json#enabledApiProposals-property declares: [] but NOT inlineCompletionsAdditions.\n" +
-      " The missing proposal MUST be added and you must start in extension development mode or use the following command line switch: --enable-proposed-api sr-team.nesweep",
+      " The missing proposal MUST be added and you must start in extension development mode or use the following command line switch: --enable-proposed-api s-obvious.nesweep",
   );
 
   afterEach(() => {
@@ -74,7 +74,7 @@ describe("inline completion provider registration", () => {
     },
     {
       label: "a different API proposal denial",
-      failure: new Error("Extension 'sr-team.nesweep' CANNOT use API proposal: inlineEdit."),
+      failure: new Error("Extension 's-obvious.nesweep' CANNOT use API proposal: inlineEdit."),
     },
     {
       label: "an error mentioning the proposal without denying access",

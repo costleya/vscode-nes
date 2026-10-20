@@ -24,7 +24,7 @@
     "type": "git",
     "url": "https://github.com/sr-tream/vscode-nes"
   },
-  "publisher": "SR-team",
+  "publisher": "s-obvious",
   "main": "./out/extension.mjs",
   "scripts": {
     "build": "vp pack",
@@ -247,7 +247,7 @@
             "tags": [
               "experimental"
             ],
-            "markdownDescription": "Use VS Code's proposed inline edit presentation for next-edit suggestions.\n\n**Warning:** this depends on VS Code proposed API. It only works in VS Code Insiders launched with `--enable-proposed-api=sr-team.nesweep`; without that flag, VS Code may silently ignore the proposed inline completion fields."
+            "markdownDescription": "Use VS Code's proposed inline edit presentation for next-edit suggestions.\n\n**Warning:** this depends on VS Code proposed API. It only works in VS Code Insiders launched with `--enable-proposed-api=s-obvious.nesweep`; without that flag, VS Code may silently ignore the proposed inline completion fields."
           },
           "sweep.serverUrl": {
             "type": "string",

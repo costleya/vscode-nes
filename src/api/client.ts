@@ -945,7 +945,7 @@ export class ApiClient {
 
   getDebugInfo(): string {
     const extensionVersion =
-      vscode.extensions.getExtension("sr-tream.nesweep")?.packageJSON?.version ?? "unknown";
+      vscode.extensions.getExtension("s-obvious.nesweep")?.packageJSON?.version ?? "unknown";
     return `VSCode (${vscode.version}) - OS: ${os.platform()} ${os.arch()} - NESweep v${extensionVersion}`;
   }
 

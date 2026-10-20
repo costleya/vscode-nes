@@ -57,7 +57,7 @@ Notable NESweep fork changes are documented here, starting from the fork point a
 ## 1.2.0 - 2026-06-19
 
 - Added optional Copilot-style proposed inline edit presentation.
-- Added a user-facing warning that the Copilot-style presentation depends on VS Code proposed API and requires VS Code Insiders with `--enable-proposed-api=sr-team.nesweep`.
+- Added a user-facing warning that the Copilot-style presentation depends on VS Code proposed API and requires VS Code Insiders with `--enable-proposed-api=s-obvious.nesweep`.
 - Added a configurable `sweep.maxRecentChangesChars` prompt budget for formatted recent-edit history, defaulting to `12000` characters.
 - Truncated oversized recent-change history before sending completion requests so bulk edits cannot overflow small model contexts.
 

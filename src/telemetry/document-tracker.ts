@@ -16,7 +16,7 @@ const LEGACY_STATE_KEY_V1 = "sweep.tracker.v1";
 // panel (`output:`), SCM diff editors (`vscode-scm:`), settings.json
 // (`vscode-userdata:`), git history views (`git:`), search results,
 // notebook scratchpads, etc. — is ignored so it doesn't show up as a
-// "recent file" in the prompt (e.g. `<|file_sep|>SR-team.nesweep.NESweep.log`
+// "recent file" in the prompt (e.g. `<|file_sep|>s-obvious.nesweep.NESweep.log`
 // when the user peeks at the Output panel).
 const TRACKABLE_SCHEMES = new Set(["file", "untitled", "vscode-remote"]);
 

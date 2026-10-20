@@ -22,7 +22,7 @@ let statusBar: SweepStatusBar;
 let completionServer: CompletionServer;
 let copilotStylePresentationWarningShown = false;
 
-const COPILOT_STYLE_PROPOSED_API_EXTENSION_ID = "sr-team.nesweep";
+const COPILOT_STYLE_PROPOSED_API_EXTENSION_ID = "s-obvious.nesweep";
 
 function maybeWarnAboutCopilotStylePresentation(): void {
   if (!config.useCopilotStyleNextEditPresentation || copilotStylePresentationWarningShown) {
