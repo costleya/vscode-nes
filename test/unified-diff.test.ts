@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type * as vscode from "vscode";
 
 import { formatRecentChangeDiff } from "~/telemetry/unified-diff.ts";

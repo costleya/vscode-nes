@@ -97,14 +97,17 @@ truncates real prompts. Zeta-2.1 follows the provider profile of roughly
 budgets as one token per three UTF-8 bytes and expands to whole lines around
 the cursor, avoiding a real tokenizer in the extension-host hot path.
 
-Build & install the extension:
+Build & install the extension with Node.js 24 and pnpm 12.8.1
+(the version pinned in `package.json`):
 
 ```sh
-bun install
-bun run build
-bunx @vscode/vsce package --no-dependencies --skip-license
+pnpm install --frozen-lockfile
+pnpm build
+pnpm exec vsce package --no-dependencies --skip-license
 code --install-extension nesweep-*.vsix --force
 ```
+
+Development checks: `pnpm lint`, `pnpm typecheck`, and `pnpm test`.
 
 ## Credits
 

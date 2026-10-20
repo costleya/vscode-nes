@@ -221,11 +221,13 @@ function findLineEdits(oldLines: string[], newLines: string[]): LineEdit[] {
 		() => new Uint16Array(newCount + 1),
 	);
 	for (let oldIndex = oldCount - 1; oldIndex >= 0; oldIndex--) {
+		const row = lcs[oldIndex];
+		if (!row) continue;
 		for (let newIndex = newCount - 1; newIndex >= 0; newIndex--) {
 			if (oldLines[oldIndex] === newLines[newIndex]) {
-				lcs[oldIndex][newIndex] = (lcs[oldIndex + 1]?.[newIndex + 1] ?? 0) + 1;
+				row[newIndex] = (lcs[oldIndex + 1]?.[newIndex + 1] ?? 0) + 1;
 			} else {
-				lcs[oldIndex][newIndex] = Math.max(
+				row[newIndex] = Math.max(
 					lcs[oldIndex + 1]?.[newIndex] ?? 0,
 					lcs[oldIndex]?.[newIndex + 1] ?? 0,
 				);

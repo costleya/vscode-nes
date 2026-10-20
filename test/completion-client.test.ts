@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, test } from "bun:test";
 import * as http from "node:http";
 import type { AddressInfo } from "node:net";
+import { afterEach, describe, expect, test } from "vitest";
 
 import { CompletionClient } from "~/api/completion-client.ts";
 

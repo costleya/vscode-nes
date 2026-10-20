@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type * as vscode from "vscode";
 
 import { ApiClient, type ApiClientOptions } from "~/api/client.ts";
@@ -83,6 +83,7 @@ async function flushPromises(): Promise<void> {
 }
 
 afterEach(() => {
+	vi.useRealTimers();
 	setOutlineSymbols(0);
 });
 
@@ -194,6 +195,7 @@ describe("ApiClient Document Symbols cache", () => {
 	});
 
 	test("a timed-out provider remains single-flight and cannot block callers", async () => {
+		vi.useFakeTimers();
 		let calls = 0;
 		const { internals } = makeClient({
 			documentSymbolLoader: () => {
@@ -208,7 +210,7 @@ describe("ApiClient Document Symbols cache", () => {
 		expect(
 			internals.getDocumentSymbols(document as vscode.TextDocument),
 		).toEqual([]);
-		await Bun.sleep(5);
+		await vi.advanceTimersByTimeAsync(5);
 		expect(
 			internals.getDocumentSymbols(document as vscode.TextDocument),
 		).toEqual([]);

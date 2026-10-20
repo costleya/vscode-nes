@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import { detectModelFormat } from "~/api/model-format.ts";
 import type { AutocompleteRequest } from "~/api/schemas.ts";

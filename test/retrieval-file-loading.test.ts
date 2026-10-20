@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type * as vscode from "vscode";
 
 import { ApiClient } from "~/api/client.ts";
@@ -50,8 +50,8 @@ describe("ApiClient retrieval file loading", () => {
 		expect(chunk?.file_path).toBe("/sdk/include/vector");
 		expect(chunk?.start_line).toBe(4);
 		expect(chunk?.end_line).toBe(22);
-		expect(chunk?.content).toStartWith("line 3\n");
-		expect(chunk?.content).toEndWith("\nline 21");
+		expect(chunk?.content).toMatch(/^line 3\n/);
+		expect(chunk?.content).toMatch(/\nline 21$/);
 	});
 
 	test("uses an already-open document so unsaved target contents stay visible", async () => {

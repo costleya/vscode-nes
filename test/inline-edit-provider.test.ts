@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import * as vscode from "vscode";
 
 import type { ApiClient } from "~/api/client.ts";
@@ -154,6 +154,7 @@ function setVisibleTextEditors(editors: readonly vscode.TextEditor[]): void {
 }
 
 afterEach(() => {
+	vi.useRealTimers();
 	setMockConfiguration({});
 	setActiveTextEditor(undefined);
 	setVisibleTextEditors([]);
@@ -161,6 +162,7 @@ afterEach(() => {
 
 describe("InlineEditProvider cursor context retrigger", () => {
 	test("triggers once after a debounced exit from the editable window", async () => {
+		vi.useFakeTimers();
 		setMockConfiguration({
 			retriggerOnContextExit: true,
 			contextExitRetriggerDebounceMs: 0,
@@ -193,12 +195,12 @@ describe("InlineEditProvider cursor context retrigger", () => {
 			// is required. A 10-line window uses a 5-line trigger threshold.
 			await provider.handleCursorMove(document, new vscode.Position(0, 0));
 			await provider.handleCursorMove(document, nearPosition);
-			await Bun.sleep(5);
+			await vi.advanceTimersByTimeAsync(5);
 			expect(triggered).toEqual([]);
 
 			editor.selection = new vscode.Selection(exitPosition, exitPosition);
 			await provider.handleCursorMove(document, exitPosition);
-			await Bun.sleep(5);
+			await vi.advanceTimersByTimeAsync(5);
 			expect(triggered).toEqual(["editor.action.inlineSuggest.trigger"]);
 		} finally {
 			commands.executeCommand = originalExecuteCommand;
@@ -404,7 +406,6 @@ describe("splitDisjointLineEdits", () => {
 			endIndex: original.length,
 			completion: "before\nFIRST\nunchanged\nSECOND\nafter",
 			confidence: 0.8,
-			finishReason: "stop",
 		};
 
 		expect(splitDisjointLineEdits(original, result)).toEqual([
@@ -433,7 +434,6 @@ describe("splitDisjointLineEdits", () => {
 			endIndex: original.length,
 			completion: "FIRST\nunchanged\nlast\nSECOND",
 			confidence: 0.8,
-			finishReason: "stop",
 		};
 
 		expect(splitDisjointLineEdits(original, result)).toEqual([
@@ -462,7 +462,6 @@ describe("splitDisjointLineEdits", () => {
 			endIndex: original.length,
 			completion: "FIRST\nunchanged\nSECOND",
 			confidence: 0.8,
-			finishReason: "stop",
 		};
 
 		expect(splitDisjointLineEdits(original, result)).toEqual([
@@ -490,7 +489,6 @@ describe("splitDisjointLineEdits", () => {
 			endIndex: "one\ntwo\nthree".length,
 			completion: "ONE\ninserted\ntwo\nTHREE",
 			confidence: 0.8,
-			finishReason: "stop",
 		};
 		expect(splitDisjointLineEdits("one\ntwo\nthree", result)).toEqual([result]);
 	});

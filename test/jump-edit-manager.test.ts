@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "vitest";
 import * as vscode from "vscode";
 
 import { JumpEditManager } from "~/editor/jump-edit-manager.ts";

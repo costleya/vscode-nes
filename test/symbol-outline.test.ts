@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import {
 	type DocumentSymbolLike,
@@ -14,7 +14,9 @@ function range(startLine: number, endLine: number) {
 }
 
 describe("formatSymbolOutline", () => {
-	test("emits the active class/function path and nearby callables", () => {
+	test.each([
+		3, 4,
+	])("emits the active class/function path within a %i-symbol budget", (budget) => {
 		const symbols: DocumentSymbolLike[] = [
 			{
 				name: "CTextDraw",
@@ -43,17 +45,21 @@ describe("formatSymbolOutline", () => {
 			},
 		];
 
-		const outline = formatSymbolOutline(symbols, 42, 3);
+		const outline = formatSymbolOutline(symbols, 42, budget);
 
-		expect(outline).toContain("active_symbol: CTextDraw::Draw");
-		expect(outline).toContain(
-			"- line 16: CTextDraw::LoadTexture — void LoadTexture()",
-		);
-		expect(outline).toContain(
-			"- line 31: CTextDraw::Draw — void Draw() [active]",
-		);
-		expect(outline).toContain(
-			"- line 66: CTextDraw::Update — void Update(bool selectionEnabled)",
+		expect(outline).toBe(
+			[
+				"active_symbol: CTextDraw::Draw",
+				"nearby_symbols:",
+				"- line 11: CTextDraw",
+				"- line 16: CTextDraw::LoadTexture — void LoadTexture()",
+				"- line 31: CTextDraw::Draw — void Draw() [active]",
+				...(budget === 4
+					? [
+							"- line 66: CTextDraw::Update — void Update(bool selectionEnabled)",
+						]
+					: []),
+			].join("\n"),
 		);
 	});
 
