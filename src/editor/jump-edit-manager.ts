@@ -42,6 +42,8 @@ export class JumpEditManager implements vscode.Disposable {
   private disposables: vscode.Disposable[] = [];
   private svgBoxDecorationType = vscode.window.createTextEditorDecorationType({});
   private refreshNonce = 0;
+  private renderNonce = 0;
+  private disposed = false;
 
   constructor() {
     this.disposables.push(
@@ -117,6 +119,7 @@ export class JumpEditManager implements vscode.Disposable {
 
   setPendingJumpEdit(document: vscode.TextDocument, result: AutocompleteResult): void {
     this.clearJumpEdit();
+    if (this.disposed) return;
 
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.document.uri.toString() !== document.uri.toString()) {
@@ -162,7 +165,9 @@ export class JumpEditManager implements vscode.Disposable {
       originCursorLine: editor.selection.active.line,
     };
 
-    this.applyDecorations(editor, document);
+    void this.applyDecorations(editor, document).catch((error: unknown) => {
+      logger.warn("Failed to render jump edit preview:", error);
+    });
     vscode.commands.executeCommand("setContext", "sweep.hasJumpEdit", true);
   }
 
@@ -177,11 +182,23 @@ export class JumpEditManager implements vscode.Disposable {
     }
   }
 
-  private applyDecorations(editor: vscode.TextEditor, document: vscode.TextDocument): void {
-    if (!this.pendingJumpEdit) return;
+  private async applyDecorations(
+    editor: vscode.TextEditor,
+    document: vscode.TextDocument,
+  ): Promise<void> {
+    const pending = this.pendingJumpEdit;
+    if (!pending || this.disposed) return;
+    const renderToken = ++this.renderNonce;
+    const documentVersion = document.version;
+    const isCurrent = () =>
+      !this.disposed &&
+      this.renderNonce === renderToken &&
+      this.pendingJumpEdit === pending &&
+      document.version === documentVersion &&
+      vscode.window.activeTextEditor === editor &&
+      editor.document === document;
 
-    const { editStartPos, editEndPos, targetLine, originalLines, newLines, result } =
-      this.pendingJumpEdit;
+    const { editStartPos, editEndPos, targetLine, originalLines, newLines, result } = pending;
     const startLine = editStartPos.line;
     const removalRanges: vscode.Range[] = [];
     const floatingBoxOptions: vscode.DecorationOptions[] = [];
@@ -262,12 +279,13 @@ export class JumpEditManager implements vscode.Disposable {
         }
 
         const previewText = newLine.length > 0 ? newLine : "(delete)";
-        const decoration = createHighlightedBoxDecoration(
+        const decoration = await createHighlightedBoxDecoration(
           previewText,
           document.languageId,
           new vscode.Range(lineEnd, lineEnd),
           highlightRanges,
         );
+        if (!isCurrent()) return;
         floatingBoxOptions.push(decoration);
         renderedLineIndices.add(i);
       }
@@ -291,13 +309,14 @@ export class JumpEditManager implements vscode.Disposable {
       );
       const lineEnd = document.lineAt(startLine).range.end;
       floatingBoxOptions.push(
-        createHighlightedBoxDecorationMultiline(
+        await createHighlightedBoxDecorationMultiline(
           addedLines,
           document.languageId,
           new vscode.Range(lineEnd, lineEnd),
           highlightRangesByLine,
         ),
       );
+      if (!isCurrent()) return;
       for (let index = 0; index < addedLines.length; index++) {
         renderedLineIndices.add(index);
       }
@@ -329,13 +348,14 @@ export class JumpEditManager implements vscode.Disposable {
         if (docLine >= document.lineCount) continue;
         const lineEnd = document.lineAt(docLine).range.end;
         floatingBoxOptions.push(
-          createHighlightedBoxDecorationMultiline(
+          await createHighlightedBoxDecorationMultiline(
             combinedLines,
             document.languageId,
             new vscode.Range(lineEnd, lineEnd),
             highlightRangesByLine,
           ),
         );
+        if (!isCurrent()) return;
         for (const index of group) {
           renderedLineIndices.add(index);
         }
@@ -352,7 +372,7 @@ export class JumpEditManager implements vscode.Disposable {
         const suffix = `(+${extraCount} line${extraCount > 1 ? "s" : ""})`;
         const lineEnd = document.lineAt(lastOriginalLine).range.end;
         floatingBoxOptions.push(
-          createHighlightedBoxDecoration(
+          await createHighlightedBoxDecoration(
             suffix,
             document.languageId,
             new vscode.Range(lineEnd, lineEnd),
@@ -361,6 +381,7 @@ export class JumpEditManager implements vscode.Disposable {
       }
     }
 
+    if (!isCurrent()) return;
     editor.setDecorations(REMOVAL_DECORATION_TYPE, removalRanges);
     editor.setDecorations(this.svgBoxDecorationType, floatingBoxOptions);
 
@@ -504,28 +525,21 @@ export class JumpEditManager implements vscode.Disposable {
   }
 
   refreshJumpEditDecorations(): void {
-    if (!this.pendingJumpEdit) return;
+    this.refreshNonce += 1;
+    if (!this.pendingJumpEdit || this.disposed) return;
     this.clearDecorations();
     this.resetSvgDecorationType();
-    const pendingUri = this.pendingJumpEdit.uri;
-    this.refreshNonce += 1;
+    const pending = this.pendingJumpEdit;
     const refreshToken = this.refreshNonce;
-    const scheduleRefresh = (delay: number) => {
-      setTimeout(() => {
-        if (this.refreshNonce !== refreshToken) return;
-        if (!this.pendingJumpEdit || this.pendingJumpEdit.uri !== pendingUri) {
-          return;
-        }
-        const editor = vscode.window.activeTextEditor;
-        if (!editor || editor.document.uri.toString() !== pendingUri) {
-          return;
-        }
-        this.applyDecorations(editor, editor.document);
-      }, delay);
-    };
-    scheduleRefresh(0);
-    scheduleRefresh(50);
-    scheduleRefresh(150);
+    setTimeout(() => {
+      if (this.disposed || this.refreshNonce !== refreshToken || this.pendingJumpEdit !== pending)
+        return;
+      const editor = vscode.window.activeTextEditor;
+      if (!editor || editor.document.uri.toString() !== pending.uri) return;
+      void this.applyDecorations(editor, editor.document).catch((error: unknown) => {
+        logger.warn("Failed to refresh jump edit preview:", error);
+      });
+    }, 0);
   }
 
   private resetSvgDecorationType(): void {
@@ -544,6 +558,8 @@ export class JumpEditManager implements vscode.Disposable {
   }
 
   private clearDecorations(): void {
+    this.renderNonce += 1;
+    this.refreshNonce += 1;
     const editor = vscode.window.activeTextEditor;
     if (editor) {
       editor.setDecorations(HINT_DECORATION_TYPE, []);
@@ -553,6 +569,7 @@ export class JumpEditManager implements vscode.Disposable {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.clearJumpEdit();
     this.svgBoxDecorationType.dispose();
     for (const d of this.disposables) {

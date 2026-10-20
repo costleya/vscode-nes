@@ -63,6 +63,11 @@ vi.mock("vscode", () => {
         readFile: () => Promise.reject(new Error("vscode mock: fs.readFile not available")),
       },
     },
+    extensions: {
+      get all() {
+        return [];
+      },
+    },
     languages: {
       registerInlineCompletionItemProvider: () => ({ dispose: () => {} }),
     },

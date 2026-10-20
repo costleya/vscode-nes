@@ -352,6 +352,7 @@
   },
   "packageManager": "pnpm@12.8.1",
   "enabledApiProposals": [
-    "inlineCompletionsAdditions"
+    "inlineCompletionsAdditions",
+    "documentSyntaxHighlighting"
   ]
 }

@@ -1,64 +1,14 @@
+import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { HighlighterCore } from "@shikijs/core";
-import { createHighlighterCoreSync } from "@shikijs/core";
-import { createJavaScriptRegexEngine } from "@shikijs/engine-javascript";
-import langC from "@shikijs/langs/c";
-import langCpp from "@shikijs/langs/cpp";
-import langCsharp from "@shikijs/langs/csharp";
-import langCss from "@shikijs/langs/css";
-import langGo from "@shikijs/langs/go";
-import langHtml from "@shikijs/langs/html";
-import langJava from "@shikijs/langs/java";
-import langJs from "@shikijs/langs/javascript";
-import langJson from "@shikijs/langs/json";
-import langJsx from "@shikijs/langs/jsx";
-import langKotlin from "@shikijs/langs/kotlin";
-import langMarkdown from "@shikijs/langs/markdown";
-import langPhp from "@shikijs/langs/php";
-import langPython from "@shikijs/langs/python";
-import langRuby from "@shikijs/langs/ruby";
-import langRust from "@shikijs/langs/rust";
-import langBash from "@shikijs/langs/shellscript";
-import langSwift from "@shikijs/langs/swift";
-import langToml from "@shikijs/langs/toml";
-import langTsx from "@shikijs/langs/tsx";
-import langTs from "@shikijs/langs/typescript";
-import langYaml from "@shikijs/langs/yaml";
-import darkPlusTheme from "@shikijs/themes/dark-plus";
-import lightPlusTheme from "@shikijs/themes/light-plus";
 import type { ThemeRegistrationAny } from "@shikijs/types";
 import type { IRawThemeSetting } from "@shikijs/vscode-textmate";
 import * as vscode from "vscode";
 import { z } from "zod";
 
 import { logger } from "~/core/logger.ts";
-
-const ALL_LANGS = [
-  ...langBash,
-  ...langC,
-  ...langCpp,
-  ...langCsharp,
-  ...langCss,
-  ...langGo,
-  ...langHtml,
-  ...langJava,
-  ...langJs,
-  ...langJson,
-  ...langJsx,
-  ...langKotlin,
-  ...langMarkdown,
-  ...langPhp,
-  ...langPython,
-  ...langRuby,
-  ...langRust,
-  ...langSwift,
-  ...langToml,
-  ...langTs,
-  ...langTsx,
-  ...langYaml,
-];
 
 /** VS Code languageId → shiki grammar name (only where they differ) */
 const LANGUAGE_MAP: Record<string, string> = {
@@ -117,9 +67,8 @@ const themeJsonSchema = z.object({
 type ThemeJson = z.infer<typeof themeJsonSchema>;
 type ThemeSemanticTokenSettings = z.infer<typeof themeSemanticTokenSettingsSchema>;
 
-type ShikiThemeInput = ThemeRegistrationAny | typeof darkPlusTheme;
-
 let highlighter: HighlighterCore | null = null;
+let highlighterPromise: Promise<HighlighterCore> | null = null;
 
 function isThemeSemanticTokenSettings(value: unknown): value is ThemeSemanticTokenSettings {
   return themeSemanticTokenSettingsSchema.safeParse(value).success;
@@ -371,32 +320,155 @@ function getEditorBackgroundColor(isDark: boolean): string {
   return fallback;
 }
 
-export function initSyntaxHighlighter(): void {
-  const dark = isDarkTheme();
-  const themeJson = getCachedThemeJson();
-
-  const themes: ShikiThemeInput[] = [darkPlusTheme, lightPlusTheme];
-  if (themeJson) {
-    themes.push(buildShikiTheme(themeJson, dark));
+export async function initSyntaxHighlighter(): Promise<HighlighterCore> {
+  if (highlighter) return highlighter;
+  if (highlighterPromise) return highlighterPromise;
+  const version = themeVersion;
+  const pending = (async () => {
+    const [
+      { createHighlighterCoreSync },
+      { createJavaScriptRegexEngine },
+      modules,
+      darkTheme,
+      lightTheme,
+    ] = await Promise.all([
+      import("@shikijs/core"),
+      import("@shikijs/engine-javascript"),
+      Promise.all([
+        import("@shikijs/langs/shellscript"),
+        import("@shikijs/langs/c"),
+        import("@shikijs/langs/cpp"),
+        import("@shikijs/langs/csharp"),
+        import("@shikijs/langs/css"),
+        import("@shikijs/langs/go"),
+        import("@shikijs/langs/html"),
+        import("@shikijs/langs/java"),
+        import("@shikijs/langs/javascript"),
+        import("@shikijs/langs/json"),
+        import("@shikijs/langs/jsx"),
+        import("@shikijs/langs/kotlin"),
+        import("@shikijs/langs/markdown"),
+        import("@shikijs/langs/php"),
+        import("@shikijs/langs/python"),
+        import("@shikijs/langs/ruby"),
+        import("@shikijs/langs/rust"),
+        import("@shikijs/langs/swift"),
+        import("@shikijs/langs/toml"),
+        import("@shikijs/langs/typescript"),
+        import("@shikijs/langs/tsx"),
+        import("@shikijs/langs/yaml"),
+      ]),
+      import("@shikijs/themes/dark-plus"),
+      import("@shikijs/themes/light-plus"),
+    ]);
+    const dark = isDarkTheme();
+    const themeJson = getCachedThemeJson();
+    const themes: ThemeRegistrationAny[] = [darkTheme.default, lightTheme.default];
+    if (themeJson) themes.push(buildShikiTheme(themeJson, dark));
+    const created = createHighlighterCoreSync({
+      themes,
+      langs: modules.flatMap((module) => module.default),
+      engine: createJavaScriptRegexEngine(),
+    });
+    if (version === themeVersion) highlighter = created;
+    else created.dispose();
+    return created;
+  })();
+  highlighterPromise = pending;
+  try {
+    return await pending;
+  } finally {
+    if (highlighterPromise === pending) highlighterPromise = null;
   }
-
-  highlighter = createHighlighterCoreSync({
-    themes,
-    langs: ALL_LANGS,
-    engine: createJavaScriptRegexEngine(),
-  });
 }
 
 export function reloadTheme(): void {
   resetThemeCache();
   themeVersion += 1;
-  initSyntaxHighlighter();
+  highlighter?.dispose();
+  highlighter = null;
+  highlighterPromise = null;
   clearSvgCache();
 }
 
 interface ColoredToken {
   content: string;
   color?: string;
+  fontStyle?: number;
+}
+
+interface FullSyntaxHighlighting {
+  tokens: { length: number; foreground: number; fontStyle: number }[];
+  colorMap: string[];
+}
+
+type SyntaxHighlightingLanguages = typeof vscode.languages & {
+  computeFullSyntaxHighlighting?: (
+    source: string,
+    languageId: string,
+  ) => Thenable<FullSyntaxHighlighting>;
+  onDidChangeSyntaxHighlighting?: vscode.Event<void>;
+};
+
+/** The event getter itself is proposal-gated on unflagged VS Code hosts. */
+export function onDidChangeSyntaxHighlighting(listener: () => void): vscode.Disposable {
+  try {
+    return (
+      (vscode.languages as SyntaxHighlightingLanguages).onDidChangeSyntaxHighlighting?.(
+        listener,
+      ) ?? { dispose() {} }
+    );
+  } catch {
+    return { dispose() {} };
+  }
+}
+
+function splitTokensIntoLines(tokens: ColoredToken[]): ColoredToken[][] {
+  const lines: ColoredToken[][] = [[]];
+  for (const token of tokens) {
+    const parts = token.content.split("\n");
+    for (let i = 0; i < parts.length; i++) {
+      if (i > 0) lines.push([]);
+      const content = parts[i];
+      if (content) lines[lines.length - 1]?.push({ ...token, content });
+    }
+  }
+  return lines;
+}
+
+async function tokenizeLines(
+  text: string,
+  languageId: string,
+  dark: boolean,
+): Promise<{ lines: ColoredToken[][]; native: boolean }> {
+  try {
+    const languages = vscode.languages as SyntaxHighlightingLanguages;
+    if (languages.computeFullSyntaxHighlighting) {
+      const result = await languages.computeFullSyntaxHighlighting(text, languageId);
+      let offset = 0;
+      const tokens = result.tokens.map((token): ColoredToken => {
+        if (
+          !Number.isInteger(token.length) ||
+          token.length < 0 ||
+          offset + token.length > text.length
+        ) {
+          throw new Error("Invalid syntax highlighting token length");
+        }
+        const content = text.slice(offset, offset + token.length);
+        offset += token.length;
+        const color = token.foreground > 0 ? result.colorMap[token.foreground] : undefined;
+        if (token.foreground > 0 && !color) {
+          throw new Error("Missing syntax highlighting token color");
+        }
+        return { content, ...(color ? { color } : {}), fontStyle: token.fontStyle };
+      });
+      if (offset !== text.length) throw new Error("Incomplete syntax highlighting result");
+      return { lines: splitTokensIntoLines(tokens), native: true };
+    }
+  } catch {
+    // Missing proposal permission and tokenization failures both use the stable fallback.
+  }
+  return { lines: await tokenizeWithShiki(text, languageId, dark), native: false };
 }
 
 interface EditorFontSettings {
@@ -445,29 +517,22 @@ function expandTabs(text: string, tabSize: number): { expanded: string; indexMap
   return { expanded, indexMap };
 }
 
-function tokenizeWithShiki(text: string, languageId: string, dark: boolean): ColoredToken[] {
-  if (!highlighter) {
-    initSyntaxHighlighter();
-  }
-
-  const activeHighlighter = highlighter;
-  if (!activeHighlighter) {
-    return [{ content: text, color: dark ? FALLBACK_FG_DARK : FALLBACK_FG_LIGHT }];
-  }
-
-  const lang = resolveLanguageId(languageId);
-
-  const themeName = hasUserTheme() ? USER_THEME_NAME : dark ? "dark-plus" : "light-plus";
-
+async function tokenizeWithShiki(
+  text: string,
+  languageId: string,
+  dark: boolean,
+): Promise<ColoredToken[][]> {
   try {
-    const result = activeHighlighter.codeToTokensBase(text, {
-      lang,
+    const activeHighlighter = await initSyntaxHighlighter();
+    const themeName = hasUserTheme() ? USER_THEME_NAME : dark ? "dark-plus" : "light-plus";
+    return activeHighlighter.codeToTokensBase(text, {
+      lang: resolveLanguageId(languageId),
       theme: themeName,
     });
-    const fallback = dark ? FALLBACK_FG_DARK : FALLBACK_FG_LIGHT;
-    return result[0] ?? [{ content: text, color: fallback }];
   } catch {
-    return [{ content: text, color: dark ? FALLBACK_FG_DARK : FALLBACK_FG_LIGHT }];
+    return text
+      .split("\n")
+      .map((content) => [{ content, color: dark ? FALLBACK_FG_DARK : FALLBACK_FG_LIGHT }]);
   }
 }
 
@@ -498,7 +563,7 @@ function clearSvgCache(): void {
   try {
     const dir = getSvgCacheDir();
     for (const file of fs.readdirSync(dir)) {
-      if (file.startsWith("hl-")) {
+      if (file.startsWith("hl-") || file.startsWith("hlm-")) {
         fs.unlinkSync(path.join(dir, file));
       }
     }
@@ -516,13 +581,14 @@ function escapeXml(text: string): string {
     .replace(/'/g, "&apos;");
 }
 
-function renderSyntaxHighlightedSvgFromLines(
+async function renderSyntaxHighlightedSvgFromLines(
   lines: string[],
   languageId: string,
   dark: boolean,
   highlightRangesByLine: HighlightRange[][],
   cachePrefix: string,
-): vscode.Uri {
+): Promise<vscode.Uri> {
+  const version = themeVersion;
   const settings = getEditorFontSettings();
   const lineHeight =
     settings.lineHeight > 0 ? settings.lineHeight : Math.ceil(settings.fontSize * 1.35);
@@ -532,9 +598,21 @@ function renderSyntaxHighlightedSvgFromLines(
   const safeLines = lines.length > 0 ? lines : [""];
 
   const expandedLines = safeLines.map((line) => expandTabs(line, settings.tabSize));
-  const tokensByLine = expandedLines.map(({ expanded }) =>
-    tokenizeWithShiki(expanded, languageId, dark),
+  const tokenization = await tokenizeLines(
+    expandedLines.map(({ expanded }) => expanded).join("\n"),
+    languageId,
+    dark,
   );
+  if (version !== themeVersion) {
+    return renderSyntaxHighlightedSvgFromLines(
+      lines,
+      languageId,
+      isDarkTheme(),
+      highlightRangesByLine,
+      cachePrefix,
+    );
+  }
+  const tokensByLine = tokenization.lines;
   const lineWidths = expandedLines.map(({ expanded }) => expanded.length * charWidth);
   const totalWidth = Math.max(1, ...lineWidths);
   const totalHeight = lineHeight * safeLines.length;
@@ -571,7 +649,12 @@ function renderSyntaxHighlightedSvgFromLines(
       const color = token.color ?? (dark ? FALLBACK_FG_DARK : FALLBACK_FG_LIGHT);
       const escapedText = escapeXml(token.content);
       const displayText = escapedText.replace(/ /g, "&#160;");
-      tspans.push(`<tspan fill="${color}">${displayText}</tspan>`);
+      const style = token.fontStyle ?? 0;
+      const decorations = [style & 4 ? "underline" : "", style & 8 ? "line-through" : ""]
+        .filter(Boolean)
+        .join(" ");
+      const attributes = `${style & 1 ? ' font-style="italic"' : ""}${style & 2 ? ' font-weight="bold"' : ""}${decorations ? ` text-decoration="${decorations}"` : ""}`;
+      tspans.push(`<tspan fill="${escapeXml(color)}"${attributes}>${displayText}</tspan>`);
     }
     const y = lineIndex * lineHeight + textY;
     const lineWidth = lineWidths[lineIndex];
@@ -591,7 +674,7 @@ function renderSyntaxHighlightedSvgFromLines(
     );
   }
 
-  const backgroundColor = getEditorBackgroundColor(dark);
+  const backgroundColor = tokenization.native ? "transparent" : getEditorBackgroundColor(dark);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalWidth} ${totalHeight}" width="${totalWidth}" height="${totalHeight}">
   <rect x="0" y="0" width="${totalWidth}" height="${totalHeight}" fill="${backgroundColor}"
         stroke="${dark ? "rgba(110, 110, 110, 0.35)" : "rgba(130, 130, 130, 0.35)"}" stroke-width="1"/>
@@ -600,18 +683,12 @@ function renderSyntaxHighlightedSvgFromLines(
 </svg>`;
 
   const themeSetting = getActiveThemeSetting() ?? "";
-  const hash = Buffer.from(
-    cachePrefix +
-      safeLines.join("\n") +
-      languageId +
-      dark +
-      JSON.stringify(highlightRangesByLine) +
-      JSON.stringify(settings) +
-      backgroundColor +
-      themeSetting +
-      themeVersion.toString(),
-  )
-    .toString("base64url")
+  const hash = createHash("sha256")
+    .update(svg)
+    .update(languageId)
+    .update(themeSetting)
+    .update(themeVersion.toString())
+    .digest("hex")
     .slice(0, 16);
   const svgPath = path.join(getSvgCacheDir(), `${cachePrefix}-${hash}.svg`);
   fs.writeFileSync(svgPath, svg, "utf8");
@@ -619,21 +696,21 @@ function renderSyntaxHighlightedSvgFromLines(
   return vscode.Uri.file(svgPath);
 }
 
-export function generateSyntaxHighlightedSvg(
+export async function generateSyntaxHighlightedSvg(
   text: string,
   languageId: string,
   dark: boolean,
   highlightRanges: HighlightRange[] = [],
-): vscode.Uri {
+): Promise<vscode.Uri> {
   return renderSyntaxHighlightedSvgFromLines([text], languageId, dark, [highlightRanges], "hl");
 }
 
-export function generateSyntaxHighlightedSvgMultiline(
+export async function generateSyntaxHighlightedSvgMultiline(
   lines: string[],
   languageId: string,
   dark: boolean,
   highlightRangesByLine: HighlightRange[][] = [],
-): vscode.Uri {
+): Promise<vscode.Uri> {
   return renderSyntaxHighlightedSvgFromLines(lines, languageId, dark, highlightRangesByLine, "hlm");
 }
 
@@ -655,14 +732,14 @@ export interface HighlightRange {
   color: string;
 }
 
-export function createHighlightedBoxDecoration(
+export async function createHighlightedBoxDecoration(
   text: string,
   languageId: string,
   range: vscode.Range,
   highlightRanges: HighlightRange[] = [],
-): vscode.DecorationOptions {
+): Promise<vscode.DecorationOptions> {
   const dark = isDarkTheme();
-  const svgUri = generateSyntaxHighlightedSvg(text, languageId, dark, highlightRanges);
+  const svgUri = await generateSyntaxHighlightedSvg(text, languageId, dark, highlightRanges);
 
   return {
     range,
@@ -675,14 +752,14 @@ export function createHighlightedBoxDecoration(
   };
 }
 
-export function createHighlightedBoxDecorationMultiline(
+export async function createHighlightedBoxDecorationMultiline(
   lines: string[],
   languageId: string,
   range: vscode.Range,
   highlightRangesByLine: HighlightRange[][] = [],
-): vscode.DecorationOptions {
+): Promise<vscode.DecorationOptions> {
   const dark = isDarkTheme();
-  const svgUri = generateSyntaxHighlightedSvgMultiline(
+  const svgUri = await generateSyntaxHighlightedSvgMultiline(
     lines,
     languageId,
     dark,

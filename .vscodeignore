@@ -1,6 +1,9 @@
 .vscode/**
 .github/**
 .claude/**
+.codex/**
+.serena/**
+AGENTS.md
 .git/**
 src/**
 node_modules/**

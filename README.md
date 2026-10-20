@@ -113,6 +113,26 @@ rules, and TypeScript; `pnpm typecheck` runs lint and TypeScript checks; and
 fixes, or `pnpm format` to format files. `pnpm build` bundles the extension and
 its runtime dependencies into `out/extension.mjs` for packaging.
 
+### Native preview syntax highlighting
+
+SVG edit previews use VS Code's installed TextMate grammars and active theme
+when the `documentSyntaxHighlighting` proposed API is enabled. Launch with:
+
+```sh
+code --enable-proposed-api=s-obvious.nesweep
+```
+
+For persistent enablement, run **Preferences: Configure Runtime Arguments**,
+add `"enable-proposed-api": ["s-obvious.nesweep"]` to `argv.json`, and fully
+restart VS Code. Proposed APIs can change between VS Code releases.
+
+Normal launches retain the bundled Shiki highlighter as a fallback. Shiki is
+loaded only when native highlighting is unavailable or fails, so its grammars
+and themes remain part of the extension bundle. Native previews refresh when
+the highlighting theme changes and include embedded languages supported by
+installed grammars. This provides TextMate highlighting, without semantic
+tokens, and tokenizes the preview text without surrounding document context.
+
 ## Credits
 
 - Original [Sweep Next Edit](https://github.com/sweepai/vscode-nes)

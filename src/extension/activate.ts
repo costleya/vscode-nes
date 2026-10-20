@@ -9,7 +9,7 @@ import {
 } from "~/editor/inline-edit-provider.ts";
 import { JumpEditManager } from "~/editor/jump-edit-manager.ts";
 import { registerInlineCompletionItemProviderWithMetadata } from "~/editor/proposed-inline-edit.ts";
-import { initSyntaxHighlighter, reloadTheme } from "~/editor/syntax-highlight-renderer.ts";
+import { onDidChangeSyntaxHighlighting, reloadTheme } from "~/editor/syntax-highlight-renderer.ts";
 import { RulesDiagnostics } from "~/extension/rules-diagnostics.ts";
 import { registerStatusBarCommands, SweepStatusBar } from "~/extension/status-bar.ts";
 import { CompletionServer } from "~/services/completion-server.ts";
@@ -40,7 +40,6 @@ function maybeWarnAboutCopilotStylePresentation(): void {
 export function activate(context: vscode.ExtensionContext) {
   const logChannel = initLogger();
   logger.info("NESweep activated");
-  initSyntaxHighlighter();
 
   tracker = new DocumentTracker(context);
   completionServer = new CompletionServer();
@@ -94,6 +93,7 @@ export function activate(context: vscode.ExtensionContext) {
     apiClient.handleDocumentSaved(document);
   });
 
+  const syntaxHighlightingListener = onDidChangeSyntaxHighlighting(refreshTheme);
   const themeChangeListener = vscode.window.onDidChangeActiveColorTheme(() => {
     refreshTheme();
   });
@@ -165,6 +165,7 @@ export function activate(context: vscode.ExtensionContext) {
     saveListener,
     editorChangeListener,
     selectionChangeListener,
+    syntaxHighlightingListener,
     themeChangeListener,
     themeConfigListener,
     tracker,
