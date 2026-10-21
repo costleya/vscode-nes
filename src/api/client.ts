@@ -11,11 +11,10 @@ import {
 } from "~/core/constants.ts";
 import { logger } from "~/core/logger.ts";
 import type { CompletionServer } from "~/services/completion-server.ts";
-import { parseNewSideRanges } from "~/telemetry/edit-merger.ts";
 import { toUnixPath } from "~/utils/path.ts";
 import { isFileTooLarge, utf8ByteOffsetAt, utf8ByteOffsetToUtf16Offset } from "~/utils/text.ts";
 import type { CompletionResult } from "./completion-client.ts";
-import { detectModelFormat, type ModelFormat, type ModelPrompt } from "./model-format.ts";
+import { detectModelFormat, type ModelPrompt } from "./model-format.ts";
 import {
   fuseAndDedupRetrievalSnippets,
   orderRetrievalChunks,
@@ -25,7 +24,6 @@ import { getCommentPrefix, loadWorkspaceRules } from "./rules.ts";
 import {
   type AutocompleteRequest,
   AutocompleteRequestSchema,
-  type AutocompleteResponse,
   type AutocompleteResult,
   type EditorDiagnostic,
   type FileChunk,
@@ -33,11 +31,8 @@ import {
   type RecentChange,
   type UserAction,
 } from "./schemas.ts";
-import { buildSweepResponse } from "./sweep-completion.ts";
-import { buildSweepPrompt, selectSweepBroadWindow } from "./sweep-prompt.ts";
 import { formatSymbolOutline, type OutlineSymbolLike } from "./symbol-outline.ts";
-import { buildZeta2Response } from "./zeta2-completion.ts";
-import { buildZeta2Prompt, selectZetaCursorWindowFromLineProvider } from "./zeta2-prompt.ts";
+import { getModelProvider } from "./model-provider.ts";
 
 export interface AutocompleteInput {
   document: vscode.TextDocument;
@@ -84,36 +79,9 @@ export interface ApiClientOptions {
 }
 
 // Per-chunk retrieval truncation is derived from the shared active-file
-// budget. With the default 2,000 estimated tokens and roughly ten estimated
-// tokens per source line, this preserves the former 133-line cap.
+// budget so retrieval scales with the configured editable excerpt.
 function retrievalChunkLines(): number {
   return Math.max(1, Math.floor(config.editableTokens / 15));
-}
-
-/**
- * The Sweep broad/original/current sections already carry the active edit.
- * Do not duplicate an active-file diff that touches the broad window in the
- * earlier history section: a coalesced typing hunk would otherwise become
- * the first volatile prompt text and defeat prefix caching.
- */
-export function excludeSweepBroadWindowChanges(
-  changes: RecentChange[],
-  activeFilePath: string,
-  lines: string[],
-  cursorLine: number,
-  editableTokens: number,
-): RecentChange[] {
-  const broadWindow = selectSweepBroadWindow(lines, cursorLine, editableTokens);
-  const startLine = broadWindow.start + 1;
-  const endLine = broadWindow.end;
-  return changes.filter((change) => {
-    if (toUnixPath(change.path) !== activeFilePath) return true;
-    const hunks = parseNewSideRanges(change.diff);
-    // An unparseable active-file diff is still duplicate, volatile context;
-    // omit it rather than allowing it to invalidate the early prefix.
-    if (hunks.length === 0) return false;
-    return !hunks.some((hunk) => hunk.newStart <= endLine && hunk.newEnd >= startLine);
-  });
 }
 
 export function formatRecentChanges(
@@ -271,7 +239,8 @@ export class ApiClient {
     }
 
     const format = detectModelFormat(config.modelName);
-    const requestData = await this.buildRequest(input, format);
+    const provider = getModelProvider(config.modelName);
+    const requestData = await this.buildRequest(input);
     const parsedRequest = AutocompleteRequestSchema.safeParse(requestData);
     if (!parsedRequest.success) {
       logger.error("Invalid request data:", parsedRequest.error.message);
@@ -282,29 +251,17 @@ export class ApiClient {
     const commentPrefix = getCommentPrefix(input.document.languageId);
     const inlineDiagnosticsMarker = config.inlineDiagnosticsMarker;
     const messageTransforms = config.diagnosticsMessageTransforms;
-    const prompt: ModelPrompt =
-      format === "zeta2" || format === "zeta2.1"
-        ? buildZeta2Prompt(parsedRequest.data, {
-            diagRadius: config.diagRadius,
-            rules,
-            commentPrefix,
-            injectInlineDiagnostics: config.injectInlineDiagnostics,
-            inlineDiagnosticsMarker,
-            messageTransforms,
-            protocolVersion: format === "zeta2.1" ? "2.1" : "2",
-            editableTokens: config.editableTokens,
-            contextTokens: config.zetaContextTokens,
-            maxRelatedChunks: config.maxContextFiles,
-          })
-        : buildSweepPrompt(parsedRequest.data, {
-            editableTokens: config.editableTokens,
-            diagRadius: config.diagRadius,
-            rules,
-            commentPrefix,
-            injectInlineDiagnostics: config.injectInlineDiagnostics,
-            inlineDiagnosticsMarker,
-            messageTransforms,
-          });
+    const prompt: ModelPrompt = provider.buildPrompt(parsedRequest.data, {
+      diagRadius: config.diagRadius,
+      rules,
+      commentPrefix,
+      injectInlineDiagnostics: config.injectInlineDiagnostics,
+      inlineDiagnosticsMarker,
+      messageTransforms,
+      editableTokens: config.editableTokens,
+      contextTokens: config.zetaContextTokens,
+      maxRelatedChunks: config.maxContextFiles,
+    });
 
     const reqStarted = Date.now();
     const promptCacheKey = this.getPromptCacheKey(prompt);
@@ -348,13 +305,7 @@ export class ApiClient {
       logger.trace("← /v1/completions raw response:", completion.text);
 
       const id = `nesweep-${Date.now()}-${++this.idCounter}`;
-      let responses: AutocompleteResponse[] | null;
-      if (format === "zeta2" || format === "zeta2.1") {
-        responses = buildZeta2Response(completion, prompt, id);
-      } else {
-        const single = buildSweepResponse(completion, prompt, id);
-        responses = single ? [single] : null;
-      }
+      const responses = provider.buildResponse(completion, prompt, id);
       if (!responses) return null;
 
       const decode = (i: number) => utf8ByteOffsetToUtf16Offset(documentText, i);
@@ -453,10 +404,7 @@ export class ApiClient {
     });
   }
 
-  private async buildRequest(
-    input: AutocompleteInput,
-    format: ModelFormat,
-  ): Promise<AutocompleteRequest> {
+  private async buildRequest(input: AutocompleteInput): Promise<AutocompleteRequest> {
     const {
       document,
       position,
@@ -468,45 +416,18 @@ export class ApiClient {
     } = input;
 
     const filePath = toUnixPath(document.uri.fsPath) || "untitled";
-    const isZeta = format === "zeta2" || format === "zeta2.1";
-    const sweepRecentChanges = isZeta
-      ? recentChanges
-      : excludeSweepBroadWindowChanges(
-          recentChanges,
-          filePath,
-          Array.from({ length: document.lineCount }, (_, line) => document.lineAt(line).text),
-          position.line,
-          config.editableTokens,
-        );
-    const recentChangesText = formatRecentChanges(
-      sweepRecentChanges,
-      config.maxRecentChangesChars,
-      isZeta
-        ? {
-            maxEntries: ZETA_TRAINING_TEMPLATE_MAX_EDIT_EVENTS,
-            oldestFirst: true,
-          }
-        : {
-            // Sweep's active edit is already represented by broad context
-            // and original/current/updated. Chronological history keeps a
-            // stable prefix; evicting its oldest records preserves the newest
-            // useful edits at the volatile tail instead of pinning the cache
-            // to the just-typed hunk.
-            oldestFirst: true,
-            evictOldestToFit: true,
-          },
-    );
+    const recentChangesText = formatRecentChanges(recentChanges, config.maxRecentChangesChars, {
+      maxEntries: ZETA_TRAINING_TEMPLATE_MAX_EDIT_EVENTS,
+      oldestFirst: true,
+    });
     const fileChunks = this.buildFileChunks(recentBuffers);
-    const zetaWindow =
-      format === "zeta2.1"
-        ? selectZetaCursorWindowFromLineProvider(
-            document.lineCount,
-            position.line,
-            config.editableTokens,
-            config.zetaContextTokens,
-            (line) => document.lineAt(line).text,
-          )
-        : null;
+    const zetaWindow = getModelProvider(config.modelName).selectCursorWindow(
+      document.lineCount,
+      position.line,
+      config.editableTokens,
+      config.zetaContextTokens,
+      (line) => document.lineAt(line).text,
+    );
     const zetaContextRange = zetaWindow
       ? {
           startLine: zetaWindow.contextStart,
@@ -583,8 +504,7 @@ export class ApiClient {
     ]);
 
     // Diagnostics are emitted as a structured, distance-filtered section
-    // by the prompt builders (sweep-prompt's formatDiagnosticsSection,
-    // zeta2-prompt's formatDiagnosticsPseudoFile) using
+    // by the prompt builder using
     // editor_diagnostics. We deliberately don't include them as a
     // retrieval chunk too — that path was unfiltered (file-wide) and
     // duplicated the same data in a less useful position in the prompt.

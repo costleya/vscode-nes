@@ -121,12 +121,8 @@ export class SweepConfig {
     return Math.max(0, Math.floor(this.config.get<number>(key, fallback)));
   }
 
-  // Recommended for the small SweepAI checkpoints (0.5B and 1.5B) that
-  // ignore the structured diagnostics section. 7B SweepAI default and
-  // 8B Zeta2 SeedCoder don't need it. Appends a `// <marker> (code:
-  // <code>) - <message>` comment next to every nearby diagnosed line
-  // in the rendered prompt; the response is then run through a strip
-  // that anchors on the literal `<commentPrefix> <marker>` substring.
+  // Append diagnostic comments next to nearby source lines in the rendered
+  // prompt. Response cleanup strips the injected marker before diffing.
   get injectInlineDiagnostics(): boolean {
     return this.config.get<boolean>("injectInlineDiagnostics", false);
   }

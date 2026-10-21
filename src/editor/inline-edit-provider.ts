@@ -1,9 +1,7 @@
 import * as vscode from "vscode";
 import type { ApiClient, AutocompleteInput } from "~/api/client.ts";
-import { detectModelFormat } from "~/api/model-format.ts";
+import { getModelProvider } from "~/api/model-provider.ts";
 import type { AutocompleteResult } from "~/api/schemas.ts";
-import { selectSweepEditWindow } from "~/api/sweep-prompt.ts";
-import { selectZetaCursorWindowFromLineProvider } from "~/api/zeta2-prompt.ts";
 import { config } from "~/core/config";
 import { JUMP_RETRIGGER_DELAY_MS } from "~/core/constants.ts";
 import { logger } from "~/core/logger.ts";
@@ -154,7 +152,7 @@ export function splitDisjointLineEdits(
       splitEdits.push(edit);
       continue;
     }
-    // Sweep sometimes stops directly after the final replacement, omitting
+    // Model responses can stop directly after the final replacement, omitting
     // the unchanged tail of the rewrite window. Preserve that tail so it
     // does not become a destructive deletion in the last small suggestion.
     if (index === edits.length - 1 && oldLength > newLength && newLength > 0) {
@@ -839,24 +837,15 @@ export class InlineEditProvider implements vscode.InlineCompletionItemProvider {
     document: vscode.TextDocument,
     snapshot: Pick<RequestSnapshot, "uri" | "version" | "position">,
   ): void {
-    const format = detectModelFormat(config.modelName);
-    let startLine: number;
-    let endLine: number;
-    if (format === "sweep") {
-      const window = selectSweepEditWindow(document.lineCount, snapshot.position.line);
-      startLine = window.start;
-      endLine = window.end;
-    } else {
-      const window = selectZetaCursorWindowFromLineProvider(
-        document.lineCount,
-        snapshot.position.line,
-        config.editableTokens,
-        config.zetaContextTokens,
-        (line) => document.lineAt(line).text,
-      );
-      startLine = window.editableStart;
-      endLine = window.editableEnd;
-    }
+    const window = getModelProvider(config.modelName).selectCursorWindow(
+      document.lineCount,
+      snapshot.position.line,
+      config.editableTokens,
+      config.zetaContextTokens,
+      (line) => document.lineAt(line).text,
+    );
+    const startLine = window.editableStart;
+    const endLine = window.editableEnd;
     if (endLine <= startLine) return;
 
     this.clearEditableContextWindow();

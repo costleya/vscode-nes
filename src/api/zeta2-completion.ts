@@ -1,27 +1,11 @@
-// Postprocessing for Zeta2 / Zeta2.1 model output. Mirrors parseCompletion
-// in cursortab.nvim's server/provider/zeta2/zeta2.go for the 2.0 path.
-// Zeta2.1 uses numbered boundaries: the first and last markers emitted by
-// the model identify the original document span replaced by the text
-// between them.
-//
-// The common API returns an array, but a Zeta2.1 response represents one
-// contiguous marker span and therefore produces at most one edit.
-//
-// Unlike Sweep, the model output is *only* the new editable region (not
-// a full window rewrite), so trimCommonEnds runs against the editable
-// slice rather than the full original/current/updated window.
+// Map Zeta 2.1 marker spans to document edits.
 
 import { logger } from "~/core/logger.ts";
 import type { CompletionResult } from "./completion-client.ts";
 import type { EditRegion, ModelPrompt } from "./model-format.ts";
 import type { AutocompleteResponse } from "./schemas.ts";
-import { stripInjectedFixmesFromLines } from "./sweep-completion.ts";
-import {
-  ZETA2_1_EOS_MARKER,
-  ZETA2_CURSOR_MARKER,
-  ZETA2_END_MARKER,
-  ZETA2_NO_EDITS,
-} from "./zeta2-prompt.ts";
+import { stripInjectedFixmesFromLines } from "./prompt-utils.ts";
+import { ZETA2_1_EOS_MARKER, ZETA2_CURSOR_MARKER } from "./zeta2-prompt.ts";
 
 export function buildZeta2Response(
   completion: CompletionResult,
@@ -42,57 +26,27 @@ export function buildZeta2Response(
 
   const responses: AutocompleteResponse[] = [];
 
-  if (prompt.format === "zeta2.1") {
-    const markerSpan = parseMarkerSpan(
-      completion.text,
-      regions,
-      primary,
-      prompt.markerBoundaryLines,
+  const markerSpan = parseMarkerSpan(completion.text, regions, primary, prompt.markerBoundaryLines);
+  if (markerSpan) {
+    const response = buildRegionResponse(
+      markerSpan.replacement,
+      markerSpan.region,
+      prompt,
+      autocompleteId,
+      completion.finishReason,
     );
-    if (markerSpan) {
-      const response = buildRegionResponse(
-        markerSpan.replacement,
-        markerSpan.region,
-        prompt,
-        autocompleteId,
-        completion.finishReason,
-      );
-      if (response) responses.push(response);
-    } else if (NUMBERED_MARKER_RE.test(completion.text)) {
-      // Numbered markers were present but did not form a safe,
-      // increasing span. Falling back to the primary window here can
-      // apply correct-looking text to the wrong part of the file.
-      logger.debug("zeta2.1 response contained an invalid marker span");
-      return null;
-    } else {
-      // Lenient fallback for servers/checkpoints that omit both
-      // boundary markers and return the primary replacement directly.
-      const cleaned = stripZeta21Eos(completion.text);
-      if (cleaned.trim() === "") return null;
-      const response = buildRegionResponse(
-        cleaned,
-        primary,
-        prompt,
-        autocompleteId,
-        completion.finishReason,
-      );
-      if (response) responses.push(response);
-    }
+    if (response) responses.push(response);
+  } else if (NUMBERED_MARKER_RE.test(completion.text)) {
+    // Numbered markers were present but did not form a safe,
+    // increasing span. Falling back to the primary window here can
+    // apply correct-looking text to the wrong part of the file.
+    logger.debug("zeta2.1 response contained an invalid marker span");
+    return null;
   } else {
-    // 2.0 single-region path. Strip the end-of-edit scaffolding once,
-    // then run a diff against the primary region.
-    let cleaned = completion.text;
-    // Strip trailing >>>>>>> UPDATED.
-    if (cleaned.endsWith(ZETA2_END_MARKER)) {
-      cleaned = cleaned.slice(0, -ZETA2_END_MARKER.length);
-    } else {
-      const trimmed = ZETA2_END_MARKER.replace(/\n$/, "");
-      if (cleaned.endsWith(trimmed)) {
-        cleaned = cleaned.slice(0, -trimmed.length);
-      }
-    }
+    // Lenient fallback for servers/checkpoints that omit both
+    // boundary markers and return the primary replacement directly.
+    const cleaned = stripZeta21Eos(completion.text);
     if (cleaned.trim() === "") return null;
-    if (cleaned.trimStart().startsWith(ZETA2_NO_EDITS)) return null;
     const response = buildRegionResponse(
       cleaned,
       primary,
@@ -192,8 +146,7 @@ function buildRegionResponse(
   // Replace the FIRST cursor marker with a sentinel so we can track
   // the post-edit cursor position through the line-diff and surface
   // it as a snippet $0 placeholder. Accept both <|user_cursor|>
-  // (Zeta2's trained marker) and <|cursor|> (sweep-style — some
-  // SeedCoder checkpoints echo it back). Only the primary region is
+  // (Zeta's trained marker) and the alternative <|cursor|> echo. Only the primary region is
   // expected to contain a cursor marker, but secondary regions are
   // safe to run through this — countCursorMarkers will return 0.
   const markerCount = countCursorMarkers(text);

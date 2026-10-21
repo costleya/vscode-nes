@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { excludeSweepBroadWindowChanges, formatRecentChanges } from "~/api/client.ts";
+import { formatRecentChanges } from "~/api/client.ts";
 
 function diffWithBody(bodyLines: string[]): string {
   return [
@@ -21,19 +21,6 @@ describe("formatRecentChanges", () => {
     );
 
     expect(result).toBe("");
-  });
-
-  test("omits active-file hunks already covered by the Sweep broad window", () => {
-    const lines = Array.from({ length: 100 }, () => "x".repeat(19));
-    const changes = [
-      { path: "src/active.ts", diff: "@@ -50,1 +50,1 @@\n-old\n+new" },
-      { path: "src/active.ts", diff: "@@ -80,1 +80,1 @@\n-old\n+new" },
-      { path: "src/other.ts", diff: "@@ -50,1 +50,1 @@\n-old\n+new" },
-      { path: "src/active.ts", diff: "unparseable active diff" },
-    ];
-    const result = excludeSweepBroadWindowChanges(changes, "src/active.ts", lines, 50, 30);
-
-    expect(result).toEqual([changes[1], changes[2]]);
   });
 
   test("keeps multiple small cleaned diff records", () => {

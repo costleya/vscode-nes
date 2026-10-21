@@ -27,11 +27,10 @@ export const JUMP_RETRIGGER_DELAY_MS = 100;
 // VSCode hands us the entire file's diagnostic set per request; keeping all
 // of them dominates the prompt for files with a chatty linter.
 export const DEFAULT_DIAG_RADIUS = 12;
-// Shared current-file budget for Sweep's broad context and Zeta's editable
-// excerpt. NESweep deliberately avoids loading a tokenizer into the extension
-// host: prompt builders estimate one token per three UTF-8 bytes and retain
+// Current-file budget for Zeta 2.1's editable excerpt. NESweep avoids loading
+// a tokenizer into the extension host: prompt builders estimate one token per three UTF-8 bytes and retain
 // whole lines around the cursor.
-export const DEFAULT_EDITABLE_TOKENS = 2_000;
+export const DEFAULT_EDITABLE_TOKENS = 350;
 export const DEFAULT_ZETA_CONTEXT_TOKENS = 150;
 export const ESTIMATED_BYTES_PER_TOKEN = 3;
 // Zed's V0318 provider sends at most six edit events. The client selects
@@ -40,13 +39,9 @@ export const ESTIMATED_BYTES_PER_TOKEN = 3;
 export const ZETA_TRAINING_TEMPLATE_MAX_EDIT_EVENTS = 6;
 
 // Model parameters
-export const MODEL_NAME = "sweepai/sweep-next-edit";
-// Stay generous: the sweep model rewrites the whole edit window even when
-// only one line changed, so a too-low cap truncates mid-window. Without
-// cursortab's anchor-based truncation handling, a truncated response yields
-// a corrupt line-diff (window tail no longer matches), so we just reject
-// finish_reason=length completions in sweep-completion. Keep num_predict
-// high enough that healthy responses never hit this cap.
+export const MODEL_NAME = "zeta-2.1";
+// Allow full editable excerpts; truncated completions are rejected to avoid
+// deleting original code beyond a partial response.
 export const MAX_TOKENS = 2048;
 export const TEMPERATURE = 0.0;
 
@@ -60,5 +55,5 @@ export const AUTOCOMPLETE_AVG_LINE_LENGTH_THRESHOLD = 240;
 // on a server with prefix caching (llama.cpp -cpent, vLLM/sglang), so
 // the steady-state cost is mainly the context budget consumed, plus a
 // prompt-eval spike on each save (cache invalidation). ~3000 chars is
-// roughly 1000 tokens on the Sweep tokenizer.
+// roughly 1000 tokens under the prompt byte-budget estimate.
 export const DEFAULT_RULES_MAX_CHARS = 3000;

@@ -1,12 +1,4 @@
-// Zeta2 / Zeta2.1 (Zed's SeedCoder-8B edit-prediction model family)
-// prompt builder. Ported from cursortab.nvim's
-// server/provider/zeta2/zeta2.go. The 2.0 checkpoint is distributed as
-// `zed-industries/zeta2`; the 2.1 checkpoint is `zed-industries/zeta-2.1`.
-// Both use the SeedCoder SPM Fill-In-Middle layout — they only differ in
-// the markers wrapping the editable region and the stop tokens. We
-// parameterise on `protocolVersion` (2.0 or 2.1) and dispatch the right
-// markers from a small table.
-//
+// Zeta 2.1 (Zed V0318) prompt builder.
 // Prompt layout (single completion text fed to /v1/completions). Pseudo-
 // files inside the prefix block are ordered with rules first, then volatile
 // context, with diagnostics last so the model sees them adjacent to the
@@ -35,14 +27,12 @@
 //
 //   <filename>{cursor file path}
 //   {code before editable region}
-//   <openRegion>                              2.0: "<<<<<<< CURRENT\n"
-//   {editable region with <|user_cursor|> inline}     2.1: "<|marker_1|>\n"
-//   <closeRegion>                             2.0: "=======\n"
-//   <[fim-middle]>                                      2.1: "<|marker_2|>\n"
+//   <|marker_1|>
+//   {editable region with <|user_cursor|> inline}
+//   <|marker_2|>
+//   <[fim-middle]>
 //
-// 2.0 model emits the replacement editable region terminated by
-// ">>>>>>> UPDATED". A literal "NO_EDITS" output means no change.
-// 2.1 numbered markers are Zed V0318 boundaries inside one contiguous
+// Numbered markers are Zed V0318 boundaries inside one contiguous
 // editable excerpt. The model returns one span from any marker N to a later M:
 // "<|marker_N|>\n{replacement}\n<|marker_M|>". The response parser maps
 // those two boundary numbers back to document offsets.
@@ -63,9 +53,8 @@ import {
   normalizeDiagnosticMessage,
   renderDiagnosticsAsComments,
   splitLines,
-} from "./sweep-prompt.ts";
+} from "./prompt-utils.ts";
 
-export const ZETA2_STOP_TOKENS = [">>>>>>> UPDATED\n", ">>>>>>> UPDATED"];
 export const ZETA2_1_EOS_MARKER = "<[end▁of▁sentence]>";
 export const ZETA2_1_STOP_TOKENS = [ZETA2_1_EOS_MARKER];
 
@@ -73,36 +62,7 @@ const FIM_SUFFIX = "<[fim-suffix]>";
 const FIM_PREFIX = "<[fim-prefix]>";
 const FIM_MIDDLE = "<[fim-middle]>";
 const FILE_MARKER = "<filename>";
-export const ZETA2_CURRENT_MARKER = "<<<<<<< CURRENT\n";
-export const ZETA2_SEPARATOR = "=======\n";
-export const ZETA2_END_MARKER = ">>>>>>> UPDATED\n";
-export const ZETA2_NO_EDITS = "NO_EDITS";
 export const ZETA2_CURSOR_MARKER = "<|user_cursor|>";
-export const ZETA2_1_OPEN_MARKER = "<|marker_1|>\n";
-export const ZETA2_1_CLOSE_MARKER = "<|marker_2|>";
-
-export type Zeta2Protocol = "2" | "2.1";
-
-interface Zeta2RegionMarkers {
-  openRegion: string;
-  closeRegion: string;
-  stopTokens: string[];
-}
-
-export function getZeta2RegionMarkers(protocol: Zeta2Protocol): Zeta2RegionMarkers {
-  if (protocol === "2.1") {
-    return {
-      openRegion: ZETA2_1_OPEN_MARKER,
-      closeRegion: `${ZETA2_1_CLOSE_MARKER}\n`,
-      stopTokens: ZETA2_1_STOP_TOKENS,
-    };
-  }
-  return {
-    openRegion: ZETA2_CURRENT_MARKER,
-    closeRegion: ZETA2_SEPARATOR,
-    stopTokens: ZETA2_STOP_TOKENS,
-  };
-}
 
 const MAX_DIAGNOSTICS = 15;
 
@@ -116,23 +76,13 @@ const MAX_NUDGE_LINES = 5;
 export interface Zeta2PromptOptions {
   diagRadius: number;
   rules: string;
-  // Single-line comment prefix for the document's language. See sweep-
-  // prompt.ts SweepPromptOptions.commentPrefix for rationale.
+  // Language comment prefix used to render diagnostic context.
   commentPrefix: string;
-  // Mega-hack toggle. See sweep-prompt's SweepPromptOptions field of
-  // the same name.
+  // Append diagnostics to source lines and strip those injected comments
+  // from the response before computing edits.
   injectInlineDiagnostics: boolean;
-  // Marker phrase between comment prefix and diagnostic body. See
-  // SweepPromptOptions.inlineDiagnosticsMarker.
   inlineDiagnosticsMarker: string;
-  // User-supplied regex transforms applied after built-in diagnostic
-  // normalisations. See SweepPromptOptions.messageTransforms.
   messageTransforms: MessageTransform[];
-  // Which Zeta SeedCoder protocol the configured model speaks. "2"
-  // uses git-conflict markers around the editable region; "2.1" uses
-  // numbered boundary markers and expects the model to return the two
-  // boundaries surrounding its rewritten span.
-  protocolVersion: Zeta2Protocol;
   // Provider-profile budgets estimated as UTF-8 bytes / 3. Excerpts grow
   // symmetrically from the cursor and remain aligned to whole lines, so
   // no tokenizer is needed in the extension host.
@@ -150,7 +100,6 @@ const DEFAULT_OPTIONS: Zeta2PromptOptions = {
   injectInlineDiagnostics: false,
   inlineDiagnosticsMarker: "BUG: LSP error here",
   messageTransforms: [],
-  protocolVersion: "2",
   editableTokens: DEFAULT_EDITABLE_TOKENS,
   contextTokens: DEFAULT_ZETA_CONTEXT_TOKENS,
   maxRelatedChunks: DEFAULT_MAX_CONTEXT_FILES,
@@ -313,8 +262,8 @@ export function buildZeta2Prompt(
   );
   const editableStart = selectedWindow.editableStart;
   const editableEnd = selectedWindow.editableEnd;
-  const contextStart = opts.protocolVersion === "2.1" ? selectedWindow.contextStart : 0;
-  const contextEnd = opts.protocolVersion === "2.1" ? selectedWindow.contextEnd : lines.length;
+  const contextStart = selectedWindow.contextStart;
+  const contextEnd = selectedWindow.contextEnd;
   const promptDiagnostics = req.editor_diagnostics;
 
   // `lines` reflects the actual document and is preserved on prompt.lines
@@ -342,7 +291,7 @@ export function buildZeta2Prompt(
   const contextStats: PromptContextStats = {};
 
   // The V0318 suffix contains only the trailing part of the selected
-  // cursor context. Legacy Zeta2 keeps its previous full-file behaviour.
+  // cursor context.
   const suffixLines = promptLines.slice(primary.endLine, contextEnd);
   body += FIM_SUFFIX;
   const suffixText = suffixLines.join("\n");
@@ -426,7 +375,7 @@ export function buildZeta2Prompt(
 
   // Render the selected leading context and the contiguous editable
   // excerpt. V0318 marker placement is deterministic and independent of
-  // diagnostics. Zeta2.0 keeps its single CURRENT/======= scaffold.
+  // diagnostics.
   const markerResult = appendCursorFileBodyAndMarkers(
     (s) => {
       body += s;
@@ -436,7 +385,6 @@ export function buildZeta2Prompt(
     contextStart,
     cursorLine,
     cursorCol,
-    opts.protocolVersion,
   );
   body += FIM_MIDDLE;
   contextStats.activeFilePrefixAndEditable = body.length - cursorFileStart;
@@ -446,7 +394,7 @@ export function buildZeta2Prompt(
     contextStats,
     // FIM has no prefill — the model continues directly after <[fim-middle]>.
     prefill: "",
-    format: opts.protocolVersion === "2.1" ? "zeta2.1" : "zeta2",
+    format: "zeta2.1",
     stopTokens: markerResult.stopTokens,
     windowStartLine: primary.startLine,
     windowEndLine: primary.endLine,
@@ -484,25 +432,7 @@ function appendCursorFileBodyAndMarkers(
   contextStartLine: number,
   cursorLine: number,
   cursorCol: number,
-  protocolVersion: Zeta2Protocol,
 ): MarkerRenderResult {
-  if (protocolVersion === "2") {
-    const beforeLines = promptLines.slice(0, primary.startLine);
-    const editLines = promptLines.slice(primary.startLine, primary.endLine);
-    const markers = getZeta2RegionMarkers("2");
-    if (beforeLines.length > 0) push(`${beforeLines.join("\n")}\n`);
-    push(markers.openRegion);
-    const editableText = formatEditableWithCursor(
-      editLines,
-      cursorLine - primary.startLine,
-      cursorCol,
-    );
-    push(editableText);
-    if (!editableText.endsWith("\n")) push("\n");
-    push(markers.closeRegion);
-    return { stopTokens: markers.stopTokens };
-  }
-
   const leadingContext = promptLines.slice(contextStartLine, primary.startLine);
   if (leadingContext.length > 0) {
     push(`${leadingContext.join("\n")}\n`);
@@ -691,8 +621,7 @@ function decorateLinesWithFixmes(
     return { promptLines: lines, injectedFixmeMessages: [] };
   }
   const cursorLine1 = cursorLine + 1;
-  // See sweep-prompt.ts decorateLinesWithFixmes for the format / strip
-  // anchor rationale.
+  // The literal comment prefix and marker phrase anchor response stripping.
   type Entry = { message: string; code: string | undefined };
   const byLine = new Map<number, Entry[]>();
   for (const d of diagnostics) {
@@ -720,25 +649,6 @@ function decorateLinesWithFixmes(
     return `${line} ${opts.commentPrefix} ${opts.inlineDiagnosticsMarker}${codePart} - ${joinedMsg}`;
   });
   return { promptLines, injectedFixmeMessages: messages };
-}
-
-function formatEditableWithCursor(
-  editLines: string[],
-  cursorRelLine: number,
-  cursorCol: number,
-): string {
-  if (editLines.length === 0) return ZETA2_CURSOR_MARKER;
-  let relLine = cursorRelLine;
-  if (relLine < 0) relLine = 0;
-  if (relLine >= editLines.length) relLine = editLines.length - 1;
-
-  const out = editLines.slice();
-  const line = out[relLine] ?? "";
-  let col = cursorCol;
-  if (col > line.length) col = line.length;
-  if (col < 0) col = 0;
-  out[relLine] = line.slice(0, col) + ZETA2_CURSOR_MARKER + line.slice(col);
-  return out.join("\n");
 }
 
 function formatRecentFilesPseudoFiles(chunks: FileChunk[]): string {

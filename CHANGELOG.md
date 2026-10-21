@@ -4,6 +4,9 @@ Notable NESweep fork changes are documented here, starting from the fork point a
 
 ## Unreleased
 
+- Removed Sweep and Zeta-2 model support, retaining the model-format interfaces for future integrations. All server model names and aliases now use Zeta-2.1.
+- Changed the default model to `zeta-2.1` and the default editable budget to `350` estimated tokens, with `150` surrounding-context tokens. Existing explicit settings remain in effect.
+
 ## 1.2.7 - 2026-07-30
 
 - Made `sweep.outlineSymbols` a true nearby-symbol budget: Zeta/Sweep outlines now include useful fields, enum members, globals, and containers in addition to functions/methods, and refresh with a provider-resolved outline for dirty document versions.

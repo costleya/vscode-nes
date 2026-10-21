@@ -2,15 +2,11 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { detectModelFormat } from "~/api/model-format.ts";
 import type { AutocompleteRequest } from "~/api/schemas.ts";
-import { buildSweepPrompt, selectSweepBroadWindow } from "~/api/sweep-prompt.ts";
 import {
   buildZeta2Prompt,
   selectZetaCursorWindowFromLineProvider,
   ZETA2_1_EOS_MARKER,
-  ZETA2_CURRENT_MARKER,
   ZETA2_CURSOR_MARKER,
-  ZETA2_SEPARATOR,
-  ZETA2_STOP_TOKENS,
 } from "~/api/zeta2-prompt.ts";
 
 function makeRequest(overrides: Partial<AutocompleteRequest> = {}): AutocompleteRequest {
@@ -37,109 +33,23 @@ function makeRequest(overrides: Partial<AutocompleteRequest> = {}): Autocomplete
 }
 
 describe("detectModelFormat", () => {
-  test("default (sweep) for unknown names", () => {
-    expect(detectModelFormat("sweepai/sweep-next-edit")).toBe("sweep");
-    expect(detectModelFormat("foo/bar-baz")).toBe("sweep");
-  });
-
-  test("matches zeta2 family by substring", () => {
-    expect(detectModelFormat("zed-industries/zeta2")).toBe("zeta2");
-    expect(detectModelFormat("Zeta-2-q4")).toBe("zeta2");
-    expect(detectModelFormat("seedcoder-8b-edit")).toBe("zeta2");
-    expect(detectModelFormat("seed-coder/edit-prediction")).toBe("zeta2");
-  });
-
-  test("zeta2.1 takes precedence over the zeta2 substring", () => {
-    // "zeta-2.1" contains "zeta-2" — order matters in detectModelFormat.
-    expect(detectModelFormat("zed-industries/zeta-2.1")).toBe("zeta2.1");
-    expect(detectModelFormat("zeta2.1-q4")).toBe("zeta2.1");
-    expect(detectModelFormat("zeta-2-1")).toBe("zeta2.1");
-    expect(detectModelFormat("Zeta_2_1")).toBe("zeta2.1");
-  });
-});
-
-describe("buildSweepPrompt", () => {
-  test("emits <|file_sep|> sections, <|cursor|> marker, sweep stop tokens", () => {
-    const result = buildSweepPrompt(makeRequest());
-    expect(result.format).toBe("sweep");
-    expect(result.stopTokens).toEqual(["<|file_sep|>", "<|endoftext|>"]);
-    expect(result.prompt).toContain("<|file_sep|>src/foo.ts");
-    expect(result.prompt).toContain("<|file_sep|>original/src/foo.ts");
-    expect(result.prompt).toContain("<|file_sep|>current/src/foo.ts");
-    expect(result.prompt).toContain("<|file_sep|>updated/src/foo.ts");
-    expect(result.prompt).toContain("<|cursor|>");
-  });
-
-  test("uses a 2:1 before/after token budget for Sweep broad context", () => {
-    const lines = Array.from({ length: 100 }, () => "x".repeat(19));
-    const window = selectSweepBroadWindow(lines, 50, 30);
-
-    // 30 estimated tokens = 90 bytes. Each non-final line is 20 bytes,
-    // so two preceding lines plus the cursor line consume the 60-byte
-    // before allocation and one following line consumes the 30-byte tail.
-    expect(window).toEqual({ start: 48, end: 52 });
-  });
-
-  test("places broad context before volatile retrieval, outline and diagnostics", () => {
-    const result = buildSweepPrompt(
-      makeRequest({
-        retrieval_chunks: [
-          {
-            file_path: "src/other.ts",
-            start_line: 1,
-            end_line: 1,
-            content: "const stable = true;",
-            timestamp: 1,
-          },
-        ],
-        recent_changes: "File: src/foo.ts:\n@@\n-old\n+new",
-        symbol_outline:
-          "active_symbol: Demo::run\nnearby_functions:\n- line 10: Demo::run [active]",
-      }),
-    );
-    const retrieval = result.prompt.indexOf("<|file_sep|>context/retrieval");
-    const outline = result.prompt.indexOf("<|file_sep|>context/outline");
-    const diff = result.prompt.indexOf("<|file_sep|>recent_changes");
-    const active = result.prompt.indexOf("<|file_sep|>src/foo.ts");
-    const original = result.prompt.indexOf("<|file_sep|>original/src/foo.ts");
-    expect(retrieval).toBeGreaterThanOrEqual(0);
-    expect(diff).toBeGreaterThanOrEqual(0);
-    expect(active).toBeGreaterThan(diff);
-    expect(retrieval).toBeGreaterThan(active);
-    expect(outline).toBeGreaterThan(retrieval);
-    expect(original).toBeGreaterThan(outline);
-    expect(result.contextStats?.outline).toBeGreaterThan(0);
+  test.each([
+    "zeta-2.1",
+    "zed-industries/zeta-2.1",
+    "zeta2.1-q4",
+    "Zeta_2_1",
+    "local-model-alias",
+    "",
+    "sweepai/sweep-next-edit",
+    "zed-industries/zeta2",
+    "seedcoder-8b-edit",
+  ])("uses Zeta 2.1 for server model name %j", (modelName) => {
+    expect(detectModelFormat(modelName)).toBe("zeta2.1");
   });
 });
 
 describe("buildZeta2Prompt", () => {
-  test("emits SeedCoder FIM layout with the cursor marker inside CURRENT block", () => {
-    const result = buildZeta2Prompt(makeRequest());
-    expect(result.format).toBe("zeta2");
-    expect(result.stopTokens).toEqual(ZETA2_STOP_TOKENS);
-    expect(result.prefill).toBe("");
-
-    // Order: <[fim-suffix]> ... <[fim-prefix]> ... CURRENT ... ======= ... <[fim-middle]>
-    const suffixIdx = result.prompt.indexOf("<[fim-suffix]>");
-    const prefixIdx = result.prompt.indexOf("<[fim-prefix]>");
-    const currentIdx = result.prompt.indexOf(ZETA2_CURRENT_MARKER);
-    const sepIdx = result.prompt.indexOf(ZETA2_SEPARATOR);
-    const middleIdx = result.prompt.indexOf("<[fim-middle]>");
-
-    expect(suffixIdx).toBe(0);
-    expect(prefixIdx).toBeGreaterThan(suffixIdx);
-    expect(currentIdx).toBeGreaterThan(prefixIdx);
-    expect(sepIdx).toBeGreaterThan(currentIdx);
-    expect(middleIdx).toBeGreaterThan(sepIdx);
-
-    // <|user_cursor|> is inside the CURRENT block, ends with <[fim-middle]>.
-    const cursorIdx = result.prompt.indexOf(ZETA2_CURSOR_MARKER);
-    expect(cursorIdx).toBeGreaterThan(currentIdx);
-    expect(cursorIdx).toBeLessThan(sepIdx);
-    expect(result.prompt.endsWith("<[fim-middle]>")).toBe(true);
-  });
-
-  test("editable region uses an estimated-token budget around the cursor", () => {
+  test("default editable region uses the 350 estimated-token budget around the cursor", () => {
     const lines = Array.from(
       { length: 100 },
       (_, i) => `${i.toString().padStart(2, "0")}:${"x".repeat(96)}`,
@@ -148,7 +58,6 @@ describe("buildZeta2Prompt", () => {
     const cursorPos = lines.slice(0, 50).join("\n").length + 1;
     const result = buildZeta2Prompt(
       makeRequest({ file_contents: fileContents, cursor_position: cursorPos }),
-      { editableTokens: 350 },
     );
 
     // Ten complete 100-byte lines fit under 350 * 3 bytes. Starting
@@ -168,7 +77,6 @@ describe("buildZeta2Prompt", () => {
         cursor_position: cursorPosition,
       }),
       {
-        protocolVersion: "2.1",
         editableTokens: 50,
         contextTokens: 40,
         maxRelatedChunks: 0,
@@ -194,7 +102,6 @@ describe("buildZeta2Prompt", () => {
         cursor_position: cursorPosition,
       }),
       {
-        protocolVersion: "2.1",
         editableTokens: 20,
         contextTokens: 0,
         maxRelatedChunks: 0,
@@ -271,7 +178,7 @@ describe("buildZeta2Prompt", () => {
           },
         ],
       }),
-      { protocolVersion: "2.1", editableTokens: 350, maxRelatedChunks: 4 },
+      { editableTokens: 350, maxRelatedChunks: 4 },
     );
 
     expect(result.prompt).not.toContain("overlapping current-file retrieval");
@@ -321,9 +228,7 @@ describe("buildZeta2Prompt", () => {
         },
       ],
     });
-    const result = buildZeta2Prompt(request, {
-      protocolVersion: "2.1",
-    });
+    const result = buildZeta2Prompt(request);
     const zeta = result.prompt.indexOf("<filename>src/zeta.ts");
     const alpha = result.prompt.indexOf("<filename>src/alpha.ts");
     const history = result.prompt.indexOf("<filename>edit_history");
@@ -339,8 +244,8 @@ describe("buildZeta2Prompt", () => {
     expect(result.prompt).toContain("volatile diagnostic");
   });
 
-  test("protocolVersion 2.1 emits numbered boundaries around one excerpt", () => {
-    const result = buildZeta2Prompt(makeRequest(), { protocolVersion: "2.1" });
+  test("Zeta 2.1 emits numbered boundaries around one excerpt", () => {
+    const result = buildZeta2Prompt(makeRequest());
     expect(result.format).toBe("zeta2.1");
     expect(result.stopTokens).toEqual([ZETA2_1_EOS_MARKER]);
 
@@ -348,8 +253,8 @@ describe("buildZeta2Prompt", () => {
     // scaffolding.
     expect(result.prompt).toContain("<|marker_1|>\n");
     expect(result.prompt).toContain("<|marker_2|>\n");
-    expect(result.prompt).not.toContain(ZETA2_CURRENT_MARKER);
-    expect(result.prompt).not.toContain(ZETA2_SEPARATOR);
+    expect(result.prompt).not.toContain("<<<<<<< CURRENT");
+    expect(result.prompt).not.toContain("=======");
 
     // Order: <|marker_1|> ... <|user_cursor|> ... <|marker_2|> ... <[fim-middle]>
     const m1 = result.prompt.indexOf("<|marker_1|>\n");
@@ -365,7 +270,7 @@ describe("buildZeta2Prompt", () => {
     expect(result.markerBoundaryLines).toEqual([0, 5]);
   });
 
-  test("protocolVersion 2.1 uses V0318 hard-cap boundaries, not diagnostics", () => {
+  test("Zeta 2.1 uses V0318 hard-cap boundaries, not diagnostics", () => {
     const lines = Array.from(
       { length: 80 },
       (_, i) => `${i.toString().padStart(2, "0")}:${"x".repeat(16)}`,
@@ -389,7 +294,6 @@ describe("buildZeta2Prompt", () => {
         ],
       }),
       {
-        protocolVersion: "2.1",
         diagRadius: 0,
         editableTokens: 207,
         contextTokens: 0,
@@ -407,7 +311,7 @@ describe("buildZeta2Prompt", () => {
     expect(result.stopTokens.some((token) => token.includes("marker_"))).toBe(false);
   });
 
-  test("protocolVersion 2.1 prefers a blank-line block boundary", () => {
+  test("Zeta 2.1 prefers a blank-line block boundary", () => {
     const lines = Array.from(
       { length: 50 },
       (_, i) => `${i.toString().padStart(2, "0")}:${"x".repeat(16)}`,
@@ -424,7 +328,6 @@ describe("buildZeta2Prompt", () => {
         cursor_position: cursorPosition,
       }),
       {
-        protocolVersion: "2.1",
         editableTokens: 201,
         contextTokens: 0,
       },
@@ -435,7 +338,7 @@ describe("buildZeta2Prompt", () => {
     expect(result.markerBoundaryLines?.at(-1)).toBe(41);
   });
 
-  test("protocolVersion 2.1 crops active-file context without tokenization", () => {
+  test("Zeta 2.1 crops active-file context without tokenization", () => {
     const lines = Array.from(
       { length: 100 },
       (_, i) => `unique_${i.toString().padStart(2, "0")}_${"x".repeat(19)}`,
@@ -449,7 +352,6 @@ describe("buildZeta2Prompt", () => {
         cursor_position: cursorPosition,
       }),
       {
-        protocolVersion: "2.1",
         editableTokens: 50,
         contextTokens: 40,
       },

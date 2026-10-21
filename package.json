@@ -3,7 +3,7 @@
   "displayName": "NESweep autocompletion",
   "version": "1.2.7",
   "private": true,
-  "description": "Next Edit Autocomplete using Sweep Model",
+  "description": "Next Edit Autocomplete using Zeta-2.1",
   "categories": [
     "AI",
     "Other"
@@ -153,7 +153,7 @@
     ],
     "configuration": [
       {
-        "title": "NESweep: General & Sweep Context",
+        "title": "NESweep: General",
         "order": 10,
         "properties": {
           "sweep.enabled": {
@@ -168,14 +168,14 @@
             "default": 5,
             "order": 100,
             "minimum": 0,
-            "markdownDescription": "Maximum number of related code excerpts to bundle into the prompt. For Zeta, LSP definitions/usages are preferred, then visible and recently-viewed files fill the remaining slots. Higher values give the model more cross-file context at the cost of a longer prompt and slower first-token latency."
+            "markdownDescription": "Maximum number of related code excerpts to bundle into the prompt. For Zeta-2.1, LSP definitions/usages are preferred, then visible and recently-viewed files fill the remaining slots. Higher values give the model more cross-file context at the cost of a longer prompt and slower first-token latency."
           },
           "sweep.outlineSymbols": {
             "type": "number",
             "default": 0,
             "order": 140,
             "minimum": 0,
-            "markdownDescription": "Optional number of nearby active-file LSP Document Symbols to include for **all model formats**. The compact `context/outline` section names the active class/function path (for example `CTextDraw::Draw`) and can include methods, fields, enum members, globals, and other useful symbols; this avoids sparse C/C++ outlines where the language server flattens methods. Symbols are ranked by distance from the cursor and restored to source order. Collection is fully asynchronous, never delays a completion, and refreshes for every resolved document version, including dirty buffers; an obsolete provider response is discarded. VS Code may still invoke the language server when its own Outline cache has no model for the current document version. This is a separate compact budget and does not consume `#sweep.maxContextFiles#`. Keep the default `0` to avoid Document Symbol provider work; set a positive value to opt in."
+            "markdownDescription": "Optional number of nearby active-file LSP Document Symbols to include for Zeta-2.1. The compact `context/outline` section names the active class/function path (for example `CTextDraw::Draw`) and can include methods, fields, enum members, globals, and other useful symbols; this avoids sparse C/C++ outlines where the language server flattens methods. Symbols are ranked by distance from the cursor and restored to source order. Collection is fully asynchronous, never delays a completion, and refreshes for every resolved document version, including dirty buffers; an obsolete provider response is discarded. VS Code may still invoke the language server when its own Outline cache has no model for the current document version. This is a separate compact budget and does not consume `#sweep.maxContextFiles#`. Keep the default `0` to avoid Document Symbol provider work; set a positive value to opt in."
           },
           "sweep.maxEditHistory": {
             "type": "number",
@@ -257,9 +257,9 @@
           },
           "sweep.modelName": {
             "type": "string",
-            "default": "sweepai/sweep-next-edit",
+            "default": "zeta-2.1",
             "order": 30,
-            "markdownDescription": "Model name sent in the request body's `model` field. The prompt format is auto-selected by substring match against this name:\n\n- **Zeta-2.1 (multi-region)** — names containing `zeta-2.1`, `zeta2.1`, `zeta-2-1`, or `zeta_2_1`. Uses Zed V0318-style numbered boundaries such as `<|marker_1|>` / `<|marker_2|>` throughout one contiguous editable excerpt.\n- **Zeta-2 (single-region SeedCoder FIM)** — names containing `zeta-2`, `zeta2`, or `seedcoder`. Uses the legacy git-conflict scaffold `<<<<<<< CURRENT` / `=======` / `>>>>>>> UPDATED`.\n- **Sweep `<|file_sep|>` layout** — anything else (including the default `sweepai/sweep-next-edit`). Uses the broad-context + retrieval + `original/current/updated` triplet structure ported from cursortab.nvim."
+            "markdownDescription": "Model name sent in the request body's `model` field. Zeta-2.1 is the supported prompt/response protocol. Set this to the name or alias used by your server for a Zeta-2.1 model; the name does not select a different protocol."
           },
           "sweep.completionTimeoutMs": {
             "type": "number",
@@ -290,13 +290,13 @@
             "type": "number",
             "default": 3000,
             "order": 150,
-            "markdownDescription": "Soft cap on the size of per-language instructions files (`.vscode/nes-<languageId>.md`).\n\nRules sit at the **front** of every completion prompt — a prefix-cache-friendly slot, so a server with prompt caching (llama.cpp with `-cpent 256` to checkpoint every 256 tokens, vLLM/sglang prefix caching on by default) only re-evaluates the rules block on the first request or when the file changes. The cost of a fat rules file is therefore:\n\n- **Context budget** consumed on every request, even when cached.\n- **Prompt-eval latency spike** on first request and after every save.\n- **No caching benefit at all** if your server has caching off or the threshold is set above the rules-block size.\n\nOverflow surfaces as a Warning diagnostic + red background on the over-limit region in the editor; it does **not** truncate the file or block completions. Set to `0` to disable the warning.\n\nDefault `3000` ≈ ~1000 tokens on the Sweep tokenizer — a reasonable budget for session-stable guidance."
+            "markdownDescription": "Soft cap on the size of per-language instructions files (`.vscode/nes-<languageId>.md`).\n\nRules sit at the **front** of every completion prompt — a prefix-cache-friendly slot, so a server with prompt caching (llama.cpp with `-cpent 256` to checkpoint every 256 tokens, vLLM/sglang prefix caching on by default) only re-evaluates the rules block on the first request or when the file changes. The cost of a fat rules file is therefore:\n\n- **Context budget** consumed on every request, even when cached.\n- **Prompt-eval latency spike** on first request and after every save.\n- **No caching benefit at all** if your server has caching off or the threshold is set above the rules-block size.\n\nOverflow surfaces as a Warning diagnostic + red background on the over-limit region in the editor; it does **not** truncate the file or block completions. Set to `0` to disable the warning.\n\nDefault `3000` ≈ ~1000 tokens using the UTF-8 byte estimate — a reasonable budget for session-stable guidance."
           },
           "sweep.injectInlineDiagnostics": {
             "type": "boolean",
             "default": false,
             "order": 230,
-            "markdownDescription": "**Mega-hack: inline `// BUG:` comments next to every nearby diagnosed line in the prompt only.**\n\nAppends `<commentPrefix> <marker> (code: <code>) - <message>` to each diagnosed line in the rendered prompt — inline placement next to the affected token gets the model to attend to LSP errors much more reliably than a sibling diagnostics section. The fake comments are stripped from the response before applying, anchored on the literal `<commentPrefix> <marker>` substring so the strip survives the model paraphrasing the rest of the message body.\n\n**When to enable:**\n- ✅ **0.5B / 1.5B SweepAI checkpoints** — they routinely ignore the structured diagnostics section and need the inline nudge.\n- ❌ **7B SweepAI (default) and 8B Zeta-2 / Zeta-2.1 SeedCoder** — strong enough to pick up the structured block; the inline noise just bloats the prompt.\n\nWhen on, the structured `context/diagnostics` section is suppressed so the same data isn't emitted twice."
+            "markdownDescription": "Append diagnostic comments next to affected lines in the prompt. The comments are stripped from responses before applying edits. Disabled by default because Zeta-2.1 receives structured diagnostics; enable to experiment with inline placement. When enabled, the structured diagnostics section is suppressed to avoid duplication."
           },
           "sweep.inlineDiagnosticsMarker": {
             "type": "string",
@@ -327,10 +327,10 @@
         "properties": {
           "sweep.editableTokens": {
             "type": "number",
-            "default": 2000,
+            "default": 350,
             "order": 10,
             "minimum": 1,
-            "markdownDescription": "Approximate total token budget for the active current-file context. NESweep estimates **1 token per 3 UTF-8 bytes** and keeps complete lines. For Sweep, this controls the leading broad-context section with a **2/3 before cursor / 1/3 after cursor** target; unused budget is used on the available side at a file boundary. For Zeta-2 / Zeta-2.1, it controls the line-aligned editable excerpt. Default `2000`."
+            "markdownDescription": "Approximate token budget for the Zeta-2.1 line-aligned editable excerpt. NESweep estimates **1 token per 3 UTF-8 bytes** and keeps complete lines around the cursor. Default `350` follows the Zeta V0318 provider profile."
           },
           "sweep.zetaContextTokens": {
             "type": "number",

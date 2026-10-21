@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vite-plus/test";
 
 import type { CompletionResult } from "~/api/completion-client.ts";
-import type { EditRegion, ModelFormat, ModelPrompt, PromptLine } from "~/api/model-format.ts";
-import { computeLineByteOffsets, splitLines } from "~/api/sweep-prompt.ts";
+import type { EditRegion, ModelPrompt, PromptLine } from "~/api/model-format.ts";
+import { computeLineByteOffsets, splitLines } from "~/api/prompt-utils.ts";
 import { buildZeta2Response } from "~/api/zeta2-completion.ts";
 import { ZETA2_1_EOS_MARKER } from "~/api/zeta2-prompt.ts";
 
@@ -10,7 +10,6 @@ function makePrompt(
   fileContents: string,
   windowStartLine: number,
   windowEndLine: number,
-  format: ModelFormat,
   markerBoundaryLines?: number[],
 ): ModelPrompt {
   const lines = splitLines(fileContents);
@@ -28,8 +27,8 @@ function makePrompt(
   return {
     prompt: "",
     prefill: "",
-    format,
-    stopTokens: format === "zeta2.1" ? [ZETA2_1_EOS_MARKER] : [">>>>>>> UPDATED"],
+    format: "zeta2.1",
+    stopTokens: [ZETA2_1_EOS_MARKER],
     windowStartLine,
     windowEndLine,
     regions,
@@ -49,7 +48,7 @@ describe("buildZeta2Response — protocol 2.1 marker handling", () => {
     // open marker, emits the corrected region, then closes.
     const fileContents = ["line0", "psdlog::info();", "line2", ""].join("\n");
     const lineCount = splitLines(fileContents).length;
-    const prompt = makePrompt(fileContents, 0, lineCount, "zeta2.1");
+    const prompt = makePrompt(fileContents, 0, lineCount);
 
     const modelOutput = "<|marker_1|>\nline0\nspdlog::info();\nline2\n<|marker_2|>";
     const responses = buildZeta2Response(completion(modelOutput), prompt, "id-21");
@@ -68,7 +67,7 @@ describe("buildZeta2Response — protocol 2.1 marker handling", () => {
 
   test("close marker without trailing newline still strips", () => {
     const fileContents = ["a", "b", "c", ""].join("\n");
-    const prompt = makePrompt(fileContents, 0, splitLines(fileContents).length, "zeta2.1");
+    const prompt = makePrompt(fileContents, 0, splitLines(fileContents).length);
     const modelOutput = "<|marker_1|>\na\nb edited\nc<|marker_2|>";
     const responses = buildZeta2Response(completion(modelOutput), prompt, "id");
     expect(responses).not.toBeNull();
@@ -78,7 +77,7 @@ describe("buildZeta2Response — protocol 2.1 marker handling", () => {
 
   test("rejects malformed output with more than two boundary markers", () => {
     const fileContents = ["line0", "line1", "line2", ""].join("\n");
-    const prompt = makePrompt(fileContents, 0, splitLines(fileContents).length, "zeta2.1");
+    const prompt = makePrompt(fileContents, 0, splitLines(fileContents).length);
     const modelOutput =
       "<|marker_1|>\nline0\n<|marker_2|>\n<|marker_1|>\nline1 edited\nline2\n<|marker_2|>";
     const responses = buildZeta2Response(completion(modelOutput), prompt, "id");
@@ -87,22 +86,9 @@ describe("buildZeta2Response — protocol 2.1 marker handling", () => {
 
   test("empty markerless output is a no-op, not a whole-window deletion", () => {
     const fileContents = ["keep", "everything", ""].join("\n");
-    const prompt = makePrompt(fileContents, 0, splitLines(fileContents).length, "zeta2.1");
+    const prompt = makePrompt(fileContents, 0, splitLines(fileContents).length);
     expect(buildZeta2Response(completion(""), prompt, "id")).toBeNull();
     expect(buildZeta2Response(completion(ZETA2_1_EOS_MARKER), prompt, "id")).toBeNull();
-  });
-
-  test("2.0 still strips >>>>>>> UPDATED and respects NO_EDITS", () => {
-    const fileContents = ["a", "b", "c", ""].join("\n");
-    const prompt = makePrompt(fileContents, 0, splitLines(fileContents).length, "zeta2");
-    const modelOutput = "a\nb edited\nc\n>>>>>>> UPDATED";
-    const responses = buildZeta2Response(completion(modelOutput), prompt, "id");
-    expect(responses).not.toBeNull();
-    if (!responses || !responses[0]) return;
-    expect(responses[0].completion).toBe("b edited");
-
-    const noOp = buildZeta2Response(completion("NO_EDITS"), prompt, "id");
-    expect(noOp).toBeNull();
   });
 
   test("multi-region 2.1 maps a later contiguous block to its document range", () => {
@@ -118,7 +104,7 @@ describe("buildZeta2Response — protocol 2.1 marker handling", () => {
       "line8", // 8
       "",
     ].join("\n");
-    const prompt = makePrompt(fileContents, 0, 8, "zeta2.1", [0, 4, 6, 8]);
+    const prompt = makePrompt(fileContents, 0, 8, [0, 4, 6, 8]);
 
     // marker_3 and marker_4 delimit the final block in the one contiguous
     // editable excerpt.
@@ -145,7 +131,7 @@ describe("buildZeta2Response — protocol 2.1 marker handling", () => {
       "secondary1",
       "",
     ].join("\n");
-    const prompt = makePrompt(fileContents, 0, 6, "zeta2.1", [0, 2, 4, 6]);
+    const prompt = makePrompt(fileContents, 0, 6, [0, 2, 4, 6]);
 
     const responses = buildZeta2Response(
       completion(`<|marker_2|>\ngap new\ngap keep\n<|marker_3|>${ZETA2_1_EOS_MARKER}`),
@@ -161,7 +147,7 @@ describe("buildZeta2Response — protocol 2.1 marker handling", () => {
 
   test("one boundary marker infers the adjacent closing boundary", () => {
     const fileContents = ["a", "b", "c", ""].join("\n");
-    const prompt = makePrompt(fileContents, 0, splitLines(fileContents).length, "zeta2.1");
+    const prompt = makePrompt(fileContents, 0, splitLines(fileContents).length);
     // Retain compatibility with legacy OpenAI-compatible server configs
     // that strip a numbered closing boundary as a stop sequence.
     const modelOutput = "<|marker_1|>\na\nb fixed\nc\n";
@@ -182,7 +168,7 @@ describe("buildZeta2Response — protocol 2.1 marker handling", () => {
       "int x = 28;",
       "",
     ].join("\n");
-    const prompt = makePrompt(fileContents, 0, 7, "zeta2.1", [0, 4, 6, 7]);
+    const prompt = makePrompt(fileContents, 0, 7, [0, 4, 6, 7]);
 
     // Model only emits a replacement for the first V0318 block.
     const modelOutput = "<|marker_1|>\nline0\nspdlog::info();\nline2\nline3\n<|marker_2|>";
@@ -197,7 +183,7 @@ describe("buildZeta2Response — protocol 2.1 marker handling", () => {
     const fileContents = ["before", "oldPrimary();", "gap", "oldSecondary();", "after", ""].join(
       "\n",
     );
-    const prompt = makePrompt(fileContents, 0, 5, "zeta2.1", [0, 2, 3, 5]);
+    const prompt = makePrompt(fileContents, 0, 5, [0, 2, 3, 5]);
     const modelOutput = [
       "<|marker_1|>",
       "before",
@@ -225,7 +211,7 @@ describe("buildZeta2Response — protocol 2.1 marker handling", () => {
 
   test("preserves a marker-span pure deletion as an empty replacement", () => {
     const fileContents = ["before", "obsolete();", "after", ""].join("\n");
-    const prompt = makePrompt(fileContents, 0, splitLines(fileContents).length, "zeta2.1");
+    const prompt = makePrompt(fileContents, 0, splitLines(fileContents).length);
     const responses = buildZeta2Response(
       completion("<|marker_1|>\nbefore\nafter\n<|marker_2|>"),
       prompt,

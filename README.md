@@ -14,8 +14,7 @@ latency — is removed.
 - **Local OpenAI-compatible backend.** Posts to `/v1/completions` on
   any server you bring up (llama.cpp, vLLM, sglang, Ollama with the
   OpenAI shim).
-- **SweepAI + Zed Zeta-2 / Zeta-2.1 models.** Format auto-detected
-  from `sweep.modelName`. Zeta-2.1 uses Zed V0318-style numbered
+- **Zed Zeta-2.1 model support.** Uses Zed V0318-style numbered
   boundaries across one contiguous cursor-centered editable excerpt.
 - **Targeted related-code context.** LSP definitions/usages are preferred,
   including distant definitions in the active file; visible and recent
@@ -38,27 +37,27 @@ latency — is removed.
 
 ## Settings
 
-| Key                                    | Default                   | Purpose                                                                                                                                                                                                                |
-| -------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sweep.serverUrl`                      | `http://localhost:8080`   | `/v1/completions` base URL                                                                                                                                                                                             |
-| `sweep.modelName`                      | `sweepai/sweep-next-edit` | `model` field in the request body; substring-matched to pick the prompt format                                                                                                                                         |
-| `sweep.completionTimeoutMs`            | `10000`                   | Per-request timeout (ms)                                                                                                                                                                                               |
-| `sweep.retriggerOnContextExit`         | `false`                   | Opt in to requesting a completion after the cursor moves at least half the last model editable window, even with no text edit                                                                                          |
-| `sweep.contextExitRetriggerDebounceMs` | `1500`                    | Debounce for context-exit cursor retriggers, allowing navigation to settle; `0` uses the next event-loop turn                                                                                                          |
-| `sweep.maxContextFiles`                | `5`                       | Related excerpt cap; Zeta prioritizes LSP retrieval, then visible/recent buffers                                                                                                                                       |
-| `sweep.outlineSymbols`                 | `0`                       | Optional nearby LSP symbols plus the active symbol path for every model. Includes methods, fields, enum members, and globals when provided; asynchronous and separate from `maxContextFiles`, a positive value opts in |
-| `sweep.maxRecentChangesChars`          | `12000`                   | Character budget for formatted recent-edit history; `0` disables history                                                                                                                                               |
-| `sweep.includeClipboardContext`        | `true`                    | Include clipboard text as retrieval context; it is emitted last in retrieval                                                                                                                                           |
-| `sweep.stableRetrievalOrdering`        | `false`                   | Sort retrieval chunks deterministically to improve prefix-cache reuse                                                                                                                                                  |
-| `sweep.reuseIdenticalPromptResults`    | `false`                   | Reuse recent temperature-0 results for byte-identical prompts                                                                                                                                                          |
-| `sweep.identicalPromptCacheTtlMs`      | `5000`                    | TTL for identical-prompt result reuse                                                                                                                                                                                  |
-| `sweep.diagRadius`                     | `12`                      | ±N lines around cursor; `0` disables                                                                                                                                                                                   |
-| `sweep.editableTokens`                 | `2000`                    | Shared approximate active-file budget, estimated as UTF-8 bytes / 3 and snapped to whole lines. Sweep allocates 2/3 before and 1/3 after the cursor; Zeta uses it for its editable excerpt.                            |
-| `sweep.zetaContextTokens`              | `150`                     | Approximate additional Zeta-2.1 current-file context budget, using the same tokenizer-free estimate                                                                                                                    |
-| `sweep.rulesMaxChars`                  | `3000`                    | Soft cap on per-language workspace-rules file size; overflow surfaces as a diagnostic + red background in the editor                                                                                                   |
-| `sweep.injectInlineDiagnostics`        | `false`                   | Inline `BUG:` comments next to diagnosed lines in the prompt — recommended for 0.5B / 1.5B sweep checkpoints                                                                                                           |
-| `sweep.inlineDiagnosticsMarker`        | `BUG: LSP error here`     | Marker phrase used by the inline injection + response-side strip anchor                                                                                                                                                |
-| `sweep.diagnosticsMessageTransforms`   | clang preset              | `{regex: replacement}` rewrites applied to every diagnostic message after the built-in normalisations                                                                                                                  |
+| Key                                    | Default                 | Purpose                                                                                                                                                                                                             |
+| -------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sweep.serverUrl`                      | `http://localhost:8080` | `/v1/completions` base URL                                                                                                                                                                                          |
+| `sweep.modelName`                      | `zeta-2.1`              | `model` field in the request body; set to your server’s Zeta-2.1 model name or alias                                                                                                                                |
+| `sweep.completionTimeoutMs`            | `10000`                 | Per-request timeout (ms)                                                                                                                                                                                            |
+| `sweep.retriggerOnContextExit`         | `false`                 | Opt in to requesting a completion after the cursor moves at least half the last model editable window, even with no text edit                                                                                       |
+| `sweep.contextExitRetriggerDebounceMs` | `1500`                  | Debounce for context-exit cursor retriggers, allowing navigation to settle; `0` uses the next event-loop turn                                                                                                       |
+| `sweep.maxContextFiles`                | `5`                     | Related excerpt cap; Zeta prioritizes LSP retrieval, then visible/recent buffers                                                                                                                                    |
+| `sweep.outlineSymbols`                 | `0`                     | Optional nearby LSP symbols plus the active symbol path for Zeta-2.1. Includes methods, fields, enum members, and globals when provided; asynchronous and separate from `maxContextFiles`, a positive value opts in |
+| `sweep.maxRecentChangesChars`          | `12000`                 | Character budget for formatted recent-edit history; `0` disables history                                                                                                                                            |
+| `sweep.includeClipboardContext`        | `true`                  | Include clipboard text as retrieval context; it is emitted last in retrieval                                                                                                                                        |
+| `sweep.stableRetrievalOrdering`        | `false`                 | Sort retrieval chunks deterministically to improve prefix-cache reuse                                                                                                                                               |
+| `sweep.reuseIdenticalPromptResults`    | `false`                 | Reuse recent temperature-0 results for byte-identical prompts                                                                                                                                                       |
+| `sweep.identicalPromptCacheTtlMs`      | `5000`                  | TTL for identical-prompt result reuse                                                                                                                                                                               |
+| `sweep.diagRadius`                     | `12`                    | ±N lines around cursor; `0` disables                                                                                                                                                                                |
+| `sweep.editableTokens`                 | `350`                   | Zeta-2.1 editable excerpt budget, estimated as UTF-8 bytes / 3 and snapped to whole lines around the cursor.                                                                                                        |
+| `sweep.zetaContextTokens`              | `150`                   | Approximate additional Zeta-2.1 current-file context budget, using the same tokenizer-free estimate                                                                                                                 |
+| `sweep.rulesMaxChars`                  | `3000`                  | Soft cap on per-language workspace-rules file size; overflow surfaces as a diagnostic + red background in the editor                                                                                                |
+| `sweep.injectInlineDiagnostics`        | `false`                 | Optional inline diagnostic comments; structured diagnostics are used by default                                                                                                                                     |
+| `sweep.inlineDiagnosticsMarker`        | `BUG: LSP error here`   | Marker phrase used by the inline injection + response-side strip anchor                                                                                                                                             |
+| `sweep.diagnosticsMessageTransforms`   | clang preset            | `{regex: replacement}` rewrites applied to every diagnostic message after the built-in normalisations                                                                                                               |
 
 Zeta always uses the suffix-first FIM layout and chronological context order
 from its Zed training template. This prioritises edit quality over llama.cpp
@@ -67,33 +66,21 @@ invalidate the server cache.
 
 ## Setup
 
-Run any supported edit-prediction GGUF behind an OpenAI-compatible
-`/v1/completions` server. Examples with llama.cpp:
+Run a Zeta-2.1 GGUF behind an OpenAI-compatible `/v1/completions`
+server. Example with llama.cpp:
 
 ```sh
-# Sweep Next Edit V2 7B
-llama-server -hf henrik3/sweep-next-edit-v2-7B-GGUF --ctx-size 32768
-
-# Sweep 1.5B (smaller, faster — turn on sweep.injectInlineDiagnostics)
-llama-server -hf sweepai/sweep-next-edit-1.5B --ctx-size 32768
-
-# Zeta-2 (Zed's SeedCoder-8B, single-region)
-llama-server -hf bartowski/zed-industries_zeta-2-GGUF --ctx-size 16384
-
-# Zeta-2.1 (Zed's SeedCoder-8B, multi-region)
 llama-server -hf mradermacher/zeta-2.1-GGUF --ctx-size 16384
 ```
 
-Then point `sweep.modelName` at the right name. Detection rules:
+Set `sweep.modelName` to the model name or alias served by your backend.
+All names use the Zeta-2.1 protocol; Sweep and Zeta-2 are no longer supported.
+The `sweep.*` setting names remain compatible with existing configurations.
+If you previously selected another model, update your server and model name.
 
-- `zeta-2.1` / `zeta2.1` / `zeta-2-1` / `zeta_2_1` → Zeta-2.1 multi-region
-- `zeta2` / `zeta-2` / `seedcoder` → Zeta-2 single-region
-- everything else → Sweep layout (default)
-
-Sweep's GGUF advertises 32k natively; the full prompt routinely runs
-15–20k tokens for non-trivial files, so a smaller `--ctx-size`
-truncates real prompts. Zeta-2.1 follows the provider profile of roughly
-350 editable and 150 surrounding-context tokens. NESweep estimates those
+Zeta-2.1 follows the provider profile of roughly 350 editable and 150
+surrounding-context tokens by default. Existing explicit budget settings
+remain in effect. NESweep estimates those
 budgets as one token per three UTF-8 bytes and expands to whole lines around
 the cursor, avoiding a real tokenizer in the extension-host hot path.
 
@@ -137,9 +124,7 @@ tokens, and tokenizes the preview text without surrounding document context.
 
 - Original [Sweep Next Edit](https://github.com/sweepai/vscode-nes)
   by [SweepAI](https://github.com/sweepai).
-- Sweep prompt format ported from
-  [cursortab.nvim](https://github.com/cursortab/cursortab.nvim).
-- Zeta-2 / Zeta-2.1 model card: [zed-industries on Hugging Face](https://huggingface.co/zed-industries).
+- Zeta-2.1 model card: [zed-industries on Hugging Face](https://huggingface.co/zed-industries).
 
 ## License
 
